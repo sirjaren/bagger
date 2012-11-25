@@ -16,6 +16,10 @@ __place_cursor () {
 	printf "\033[${1};${2}H"
 }
 
+__clear_line () {
+	printf "\033[K"
+}
+
 __retag_album () {
 	if [[ -n "${artist_tag}" ]] ; then
 		#printf "%s\n" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
@@ -112,25 +116,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 	# All the FLAC files in the current processed directory
 	album_flacs_array=( "${flac_directories[${current_directory}]}"/**/*.[Ff][Ll][Aa][Cc] )
 
-	# Number of FLAC files in current directory
-	#number_of_flacs="${#album_flacs_array[@]}"
-
 	# Total lines that will be used to display the
 	# FLAC files above
-	#total_lines="$(( ${number_of_flacs} + 4 ))"
 	total_lines="4"
-
-	# Go through and list each FLAC file in the current directory
-	# with the song length prepended
-	#for current_flac in "${!album_flacs_array[@]}" ; do
-	#	LENGTH="$(shntool len -ct "${album_flacs_array[${current_flac}]}")"
-	#	LENGTH="${LENGTH%%.*}"
-	#	LENGTH="${LENGTH#     }"
-	#	printf "${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" " ${LENGTH}" " " "${album_flacs_array[${current_flac}]##*/}"
-	#done
-
-	# Separator line
-	#printf "%s\n" "---------------------------------------------------------------------------"
 
 	# Pick the first FLAC file in the current directory and display all the
 	# tags that will be changed album-wise (multiple tag)
@@ -140,9 +128,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		ARTIST="${ARTIST#*=}"
 		if [[ -z "${ARTIST}" ]] ; then
 			ARTIST="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "        ARTIST: " "${ARTIST}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "         " "ARTIST:" " " "${ARTIST}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "        ARTIST: " "${ARTIST}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "         " "ARTIST:" " " "${ARTIST}"
 		fi
 
 		# Album Tag
@@ -150,9 +138,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		ALBUM="${ALBUM#*=}"
 		if [[ -z "${ALBUM}" ]] ; then
 			ALBUM="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "         ALBUM: " "${ALBUM}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "          " "ALBUM:" " " "${ALBUM}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "         ALBUM: " "${ALBUM}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "          " "ALBUM:" " " "${ALBUM}"
 		fi
 
 		# Discnumber Tag
@@ -160,9 +148,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		DISCNUMBER="${DISCNUMBER#*=}"
 		if [[ -z "${DISCNUMBER}" ]] ; then
 			DISCNUMBER="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "    DISCNUMBER: " "${DISCNUMBER}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "     " "DISCNUMBER:" " " "${DISCNUMBER}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "    DISCNUMBER: " "${DISCNUMBER}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "     " "DISCNUMBER:" " " "${DISCNUMBER}"
 		fi
 
 		# Date Tag
@@ -170,9 +158,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		DATE="${DATE#*=}"
 		if [[ -z "${DATE}" ]] ; then
 			DATE="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "          DATE: " "${DATE}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "           " "DATE:" " " "${DATE}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "          DATE: " "${DATE}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "           " "DATE:" " " "${DATE}"
 		fi
 
 		# Tracktotal Tag
@@ -180,9 +168,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		TRACKTOTAL="${TRACKTOTAL#*=}"
 		if [[ -z "${TRACKTOTAL}" ]] ; then
 			TRACKTOTAL="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "    TRACKTOTAL: " "${TRACKTOTAL}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "     " "TRACKTOTAL:" " " "${TRACKTOTAL}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "    TRACKTOTAL: " "${TRACKTOTAL}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "     " "TRACKTOTAL:" " " "${TRACKTOTAL}"
 		fi
 
 		# Genre Tag
@@ -190,9 +178,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		GENRE="${GENRE#*=}"
 		if [[ -z "${GENRE}" ]] ; then
 			GENRE="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "         GENRE: " "${GENRE}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "          " "GENRE:" " " "${GENRE}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "         GENRE: " "${GENRE}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "          " "GENRE:" " " "${GENRE}"
 		fi
 
 		# ReleaseType Tag
@@ -200,9 +188,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		RELEASETYPE="${RELEASETYPE#*=}"
 		if [[ -z "${RELEASETYPE}" ]] ; then
 			RELEASETYPE="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "   RELEASETYPE: " "${RELEASETYPE}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "    " "RELEASETYPE:" " " "${RELEASETYPE}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "   RELEASETYPE: " "${RELEASETYPE}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "    " "RELEASETYPE:" " " "${RELEASETYPE}"
 		fi
 
 		# Source Tag
@@ -210,9 +198,9 @@ for current_directory in "${!flac_directories[@]}" ; do
 		SOURCE="${SOURCE#*=}"
 		if [[ -z "${SOURCE}" ]] ; then
 			SOURCE="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "        SOURCE: " "${SOURCE}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "         " "SOURCE:" " " "${SOURCE}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "        SOURCE: " "${SOURCE}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "         " "SOURCE:" " " "${SOURCE}"
 		fi
 
 		# Mastering Tag
@@ -220,14 +208,17 @@ for current_directory in "${!flac_directories[@]}" ; do
 		MASTERING="${MASTERING#*=}"
 		if [[ -z "${MASTERING}" ]] ; then
 			MASTERING="<empty>"
-			printf "%s${MAGENTA}%s${NORMAL}\n" "     MASTERING: " "${MASTERING}"
+			printf "%s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" "      " "MASTERING:" " " "${MASTERING}"
 		else
-			printf "%s${CYAN}%s${NORMAL}\n" "     MASTERING: " "${MASTERING}"
+			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "      " "MASTERING:" " " "${MASTERING}"
 		fi
 	done
 
 	# Separator line
 	printf "%s\n" "---------------------------------------------------------------------------"
+
+	current_line=4
+	total_lines=14
 
 	# Display each tag to change (from the first FLAC file) and display
 	# a prompt giving the user a chance to change the tag found.  This will
@@ -237,7 +228,15 @@ for current_directory in "${!flac_directories[@]}" ; do
 		if [[ "${ARTIST}" == "<empty>" ]] ; then
 			ARTIST=""
 		fi
-		read -r -e -i "${ARTIST}" -p "        ARTIST: " artist_tag
+
+		__place_cursor "${current_line}" 7
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"         " "ARTIST:"
+		read -r -e -i "${ARTIST}" -p " " artist_tag 
+
 		if [[ "${ARTIST}" != "${artist_tag}" ]] ; then
 			if [[ -z "${ARTIST}" ]] ; then
 				ARTIST="<empty> -> ${artist_tag}"
@@ -245,15 +244,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				ARTIST="${ARTIST} -> ${artist_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 7
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " ARTIST: " "${ARTIST}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 7
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "ARTIST:" " " "${ARTIST}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${ALBUM}" == "<empty>" ]] ; then
 			ALBUM=""
 		fi
-		read -r -e -i "${ALBUM}" -p "         ALBUM: " album_tag
+
+		__place_cursor "${current_line}" 8
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"          " "ALBUM:"
+		read -r -e -i "${ALBUM}" -p " " album_tag
+
 		if [[ "${ALBUM}" != "${album_tag}" ]] ; then
 			if [[ -z "${ALBUM}" ]] ; then
 				ALBUM="<empty> -> ${album_tag}"
@@ -261,15 +273,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				ALBUM="${ALBUM} -> ${album_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}"  8
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " ALBUM: " "${ALBUM}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}"  8
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "ALBUM:" " " "${ALBUM}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${DISCNUMBER}" == "<empty>" ]] ; then
 			DISCNUMBER=""
 		fi
-		read -r -e -i "${DISCNUMBER}" -p "    DISCNUMBER: " discnumber_tag
+
+		__place_cursor "${current_line}" 3
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"     " "DISCNUMBER:"
+		read -r -e -i "${DISCNUMBER}" -p " " discnumber_tag
+
 		if [[ "${DISCNUMBER}" != "${discnumber_tag}" ]] ; then
 			if [[ -z "${DISCNUMBER}" ]] ; then
 				DISCNUMBER="<empty> -> ${discnumber_tag}"
@@ -277,15 +302,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				DISCNUMBER="${DISCNUMBER} -> ${discnumber_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 3
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " DISCNUMBER: " "${DISCNUMBER}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 3
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "DISCNUMBER:" " " "${DISCNUMBER}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${DATE}" == "<empty>" ]] ; then
 			DATE=""
 		fi
-		read -r -e -i "${DATE}" -p "          DATE: " date_tag
+
+		__place_cursor "${current_line}" 9
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"           " "DATE:"
+		read -r -e -i "${DATE}" -p " " date_tag
+
 		if [[ "${DATE}" != "${date_tag}" ]] ; then
 			if [[ -z "${DATE}" ]] ; then
 				DATE="<empty> -> ${date_tag}"
@@ -293,15 +331,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				DATE="${DATE} -> ${date_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 9
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " DATE: " "${DATE}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 9
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "DATE:" " " "${DATE}"
+		__place_cursor "${total_lines}" 0
+
+		printf "\033[K"
+
+		((current_line++))
 
 		if [[ "${TRACKTOTAL}" == "<empty>" ]] ; then
 			TRACKTOTAL=""
 		fi
-		read -r -e -i "${TRACKTOTAL}" -p "    TRACKTOTAL: " tracktotal_tag
+
+		__place_cursor "${current_line}" 3
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"     " "TRACKTOTAL:"
+		read -r -e -i "${TRACKTOTAL}" -p " " tracktotal_tag
+
 		if [[ "${TRACKTOTAL}" != "${tracktotal_tag}" ]] ; then
 			if [[ -z "${TRACKTOTAL}" ]] ; then
 				TRACKTOTAL="<empty> -> ${tracktotal_tag}"
@@ -309,15 +360,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				TRACKTOTAL="${TRACKTOTAL} -> ${tracktotal_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 3
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " TRACKTOTAL: " "${TRACKTOTAL}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 3
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "TRACKTOTAL:" " " "${TRACKTOTAL}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${GENRE}" == "<empty>" ]] ; then
 			GENRE=""
 		fi
-		read -r -e -i "${GENRE}" -p "         GENRE: " genre_tag
+
+		__place_cursor "${current_line}" 8
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"          " "GENRE:"
+		read -r -e -i "${GENRE}" -p " " genre_tag
+
 		if [[ "${GENRE}" != "${genre_tag}" ]] ; then
 			if [[ -z "${GENRE}" ]] ; then
 				GENRE="<empty> -> ${genre_tag}"
@@ -325,15 +389,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				GENRE="${GENRE} -> ${genre_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 8
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " GENRE: " "${GENRE}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 8
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "GENRE:" " " "${GENRE}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${RELEASETYPE}" == "<empty>" ]] ; then
 			RELEASETYPE=""
 		fi
-		read -r -e -i "${RELEASETYPE}" -p "   RELEASETYPE: " releasetype_tag
+
+		__place_cursor "${current_line}" 2
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"    " "RELEASETYPE:"
+		read -r -e -i "${RELEASETYPE}" -p " " releasetype_tag
+
 		if [[ "${RELEASETYPE}" != "${releasetype_tag}" ]] ; then
 			if [[ -z "${RELEASETYPE}" ]] ; then
 				RELEASETYPE="<empty> -> ${releasetype_tag}"
@@ -341,15 +418,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				RELEASETYPE="${RELEASETYPE} -> ${releasetype_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 2
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " RELEASETYPE: " "${RELEASETYPE}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 2
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "RELEASETYPE:" " " "${RELEASETYPE}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${SOURCE}" == "<empty>" ]] ; then
 			SOURCE=""
 		fi
-		read -r -e -i "${SOURCE}" -p "        SOURCE: " source_tag
+
+		__place_cursor "${current_line}" 7
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"         " "SOURCE:"
+		read -r -e -i "${SOURCE}" -p " " source_tag
+
 		if [[ "${SOURCE}" != "${source_tag}" ]] ; then
 			if [[ -z "${SOURCE}" ]] ; then
 				SOURCE="<empty> -> ${source_tag}"
@@ -357,15 +447,28 @@ for current_directory in "${!flac_directories[@]}" ; do
 				SOURCE="${SOURCE} -> ${source_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 7
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " SOURCE: " "${SOURCE}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
+
+		__place_cursor "${current_line}" 7
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "SOURCE:" " " "${SOURCE}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((current_line++))
 
 		if [[ "${MASTERING}" == "<empty>" ]] ; then
 			MASTERING=""
 		fi
-		read -r -e -i "${MASTERING}" -p "     MASTERING: " mastering_tag
+
+		__place_cursor "${current_line}" 4
+		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		printf "%s${CYAN}%s${NORMAL}" \
+		"      " "MASTERING:"
+		read -r -e -i "${MASTERING}" -p " " mastering_tag
+
 		if [[ "${MASTERING}" != "${mastering_tag}" ]] ; then
 			if [[ -z "${MASTERING}" ]] ; then
 				MASTERING="<empty> -> ${mastering_tag}"
@@ -373,13 +476,15 @@ for current_directory in "${!flac_directories[@]}" ; do
 				MASTERING="${MASTERING} -> ${mastering_tag}"
 			fi
 		fi
-		__place_cursor "${total_lines}" 4
-		printf "${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}" "*" " MASTERING: " "${MASTERING}"
-		__place_cursor "$(( ${total_lines} + 11 ))" 0
-		((total_lines++))
 
-		# Print newline
-		printf "\n"
+		__place_cursor "${current_line}" 4
+		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+		" " "*" " " "MASTERING:" " " "${MASTERING}"
+		__place_cursor "${total_lines}" 0
+
+		__clear_line
+
+		((total_lines++))
 
 		while read -e -r -p " Tag all the files in ${flac_directories[${current_directory}]##*/}? " ; do
 			case "${REPLY}" in
@@ -413,37 +518,33 @@ for current_directory in "${!flac_directories[@]}" ; do
 			esac
 		done
 
-		# Clear the screen
-		#printf "\033c"
+		__place_cursor "$(( ${total_lines} - 2 ))" 0
+		printf "\r\033[K"
+		__place_cursor "$(( ${total_lines} - 1 ))" 0
+		printf "\r\033[K"
 
-		# Display current directory
-		__banner
-
-		# Total lines that will be used to display the
-		# FLAC files above
-		#total_lines="$(( ${number_of_flacs} + 27 ))"
-		#total_lines="3"
-		total_lines="$(( 3 + ${#album_flacs_array[@]} ))"
+		printf "%s\n\n" "Individual File Metadata"
 
 		for flac in "${!album_flacs_array[@]}" ; do
 			# Print current FLAC file with song length
 			LENGTH="$(shntool len -ct "${album_flacs_array[${flac}]}")"
 			LENGTH="${LENGTH%%.*}"
 			LENGTH="${LENGTH#     }"
-			printf "\r\033[K${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "    ${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
+			printf "\r\033[K%s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+			"    " "${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
 		done
 
+		# Separator line
+		printf "%s\n" "---------------------------------------------------------------------------"
 
-		track_number_placement="$(( 3 + ${#album_flacs_array[@]} ))"
-		song_title_placement="$(( 3 + ${#album_flacs_array[@]} + 1 ))"
-		current_line="3"
+		current_line="$(( ${total_lines} + 1 ))"
+		total_lines="$(( ${total_lines} + ${#album_flacs_array[@]} + 2 ))"
 
 		for flac in "${!album_flacs_array[@]}" ; do
 			# Print current FLAC file with song length
 			LENGTH="$(shntool len -ct "${album_flacs_array[${flac}]}")"
 			LENGTH="${LENGTH%%.*}"
 			LENGTH="${LENGTH#     }"
-			#printf "\r\033[K${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "   ${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
 
 			__place_cursor "${current_line}" 2
 			printf "${BOLD_GREEN}%s${NORMAL}" "->"
@@ -454,9 +555,6 @@ for current_directory in "${!flac_directories[@]}" ; do
 			TRACKNUMBER="${TRACKNUMBER#*=}"
 			if [[ -z "${TRACKNUMBER}" ]] ; then
 				TRACKNUMBER="<empty>"
-				#printf "%s${MAGENTA}%s${NORMAL}\n" "   TRACKNUMBER: " "${TRACKNUMBER}"
-			#else
-				#printf "%s${CYAN}%s${NORMAL}\n" "   TRACKNUMBER: " "${TRACKNUMBER}"
 			fi
 
 			# Title Tag
@@ -464,9 +562,6 @@ for current_directory in "${!flac_directories[@]}" ; do
 			TITLE="${TITLE#*=}"
 			if [[ -z "${TITLE}" ]] ; then
 				TITLE="<empty>"
-				#printf "%s${MAGENTA}%s${NORMAL}\n" "         TITLE: " "${TITLE}"
-			#else
-				#printf "%s${CYAN}%s${NORMAL}\n" "         TITLE: " "${TITLE}"
 			fi
 
 			if [[ "${TITLE}" == "<empty>" ]] ; then
@@ -477,23 +572,19 @@ for current_directory in "${!flac_directories[@]}" ; do
 			fi
 
 			printf "%s${CYAN}%s${NORMAL}" \
-			" " "Track Number (eg. 04):"
+			" " "TRACKNUMBER:"
 			read -r -e -i "${TRACKNUMBER}" -p " " track_number
 
-			printf "%s${CYAN}%s${NORMAL}" \
-			" " "Song Title:"
-			read -r -e -i "${TRACKNUMBER} ${TITLE}" -p " " song_title
+			__place_cursor "${total_lines}" 0
+
+			printf "\r\033[K%s${CYAN}%s${NORMAL}" \
+			"       " "TITLE:"
+			read -r -e -i "${TITLE}" -p " " song_title
 
 			__place_cursor "${current_line}" 2
 
-			printf "%s${MAGENTA}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
-			" " "*" " ${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
-
-			__place_cursor "${song_title_placement}" 0
-			printf "\r\033[K"
-
-			__place_cursor "${track_number_placement}" 0
-			printf "\r\033[K"
+			printf "%s${MAGENTA}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+			" " "*" " " "${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
 
 			((current_line++))
 		done
