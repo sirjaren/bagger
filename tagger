@@ -20,6 +20,138 @@ __clear_line () {
 	printf "\033[K"
 }
 
+__save_album_tags_prompt () {
+	printf "%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
+	" Save " "album" " METADATA in " "${flac_directories[${current_directory}]##*/}" "? [" "Yes" "/" "No" "] "
+	while read -e -r ; do
+		case "${REPLY}" in
+			[Yy] | "")
+				#__retag
+				retag_files="true"
+				#exit 0
+				break
+			;;
+			[Yy][Ee][Ss])
+				retag_files="true"
+				#exit 0
+				#__retag
+				break
+			;;
+			[Nn])
+				retag_files="false"
+				#__redo_directory
+				#exit 0
+				#__retag
+				break
+			;;
+			[Nn][Oo])
+				retag_files="false"
+				#__redo_directory
+				#exit 0
+				#__retag
+				break
+			;;
+			*)
+				printf "%s\n" "Unknown answer: ${REPLY}. Exiting..."
+				exit 1
+			;;
+		esac
+	done
+}
+
+__save_file_tags_prompt () {
+	printf "\n%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
+	" Save " "file" " METADATA in " "${flac_directories[${current_directory}]##*/}" "? [" "Yes" "/" "No" "] "
+	while read -e -r ; do
+		case "${REPLY}" in
+			[Yy] | "")
+				#__retag
+				retag_files="true"
+				#exit 0
+				break
+			;;
+			[Yy][Ee][Ss])
+				retag_files="true"
+				#exit 0
+				#__retag
+				break
+			;;
+			[Nn])
+				#__redo_directory
+				#exit 0
+				#__retag
+				break
+			;;
+			[Nn][Oo])
+				#__redo_directory
+				#exit 0
+				#__retag
+				break
+			;;
+			*)
+				printf "%s\n" "Unknown answer: ${REPLY}"
+			;;
+		esac
+	done
+}
+
+__tag_directory_final_prompt () {
+	# Separator line
+	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
+
+	# The total number of lines to be used so far
+	total_lines=$(( ${current_line} + 4 ))
+
+	# Place the next separator line below the upcoming prompt
+	__place_cursor "${total_lines}" 0
+
+	# Separator line
+	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
+
+	# Return the cursor positions to where it would normally
+	# be (after the first separator line
+	__place_cursor "$(( ${total_lines} - 1 ))" 0
+
+	# Prompt
+	printf "%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
+	" Tag " "all" " the files in " "${flac_directories[${current_directory}]##*/}" "? [" "Yes" "/" "No" "] "
+	while read -e -r ; do
+		case "${REPLY}" in
+			[Yy] | "")
+				#__retag
+				retag_files="true"
+				#exit 0
+				printf "\n"
+				break
+			;;
+			[Yy][Ee][Ss])
+				retag_files="true"
+				#exit 0
+				#__retag
+				printf "\n"
+				break
+			;;
+			[Nn])
+				#__redo_directory
+				#exit 0
+				#__retag
+				printf "\n"
+				break
+			;;
+			[Nn][Oo])
+				#__redo_directory
+				#exit 0
+				#__retag
+				printf "\n"
+				break
+			;;
+			*)
+				printf "%s\n" "Unknown answer: ${REPLY}"
+			;;
+		esac
+	done
+
+}
 __retag_album () {
 	if [[ -n "${artist_tag}" ]] ; then
 		#printf "%s\n" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
@@ -80,46 +212,7 @@ __retag_album () {
 __retag_tracks () {
 	:
 }
-
-# Top banner displaying current working directory
-__banner () {
-	printf "${BOLD_GREEN}%s${NORMAL}\n" " ${flac_directories[${current_directory}]##*/}"
-}
-
-# This is the directory to process FLACs
-directory="${1%/}"
-
-# Find all the FLAC files and store in an array
-total_flacs_array=( "${directory}"/**/*.[Ff][Ll][Aa][Cc] )
-
-# Find all the directories to process (ie albums)
-for i in "${total_flacs_array[@]}" ; do
-	if [[ "${processed_directory}" != "${i%/*}" ]] ; then
-		flac_directories+=( "${i%/*}" )
-	fi
-	processed_directory="${i%/*}"
-done
-
-# This will iterate through each directory and on each
-# directory, do some processing
-for current_directory in "${!flac_directories[@]}" ; do
-
-	# Clear the screen
-	printf "\033c"
-
-	# Display current directory
-	__banner
-
-	# Show album tagging title
-	printf "%s\n\n" "Album Tagging"
-
-	# All the FLAC files in the current processed directory
-	album_flacs_array=( "${flac_directories[${current_directory}]}"/**/*.[Ff][Ll][Aa][Cc] )
-
-	# Total lines that will be used to display the
-	# FLAC files above
-	total_lines="4"
-
+__display_album_tags () {
 	# Pick the first FLAC file in the current directory and display all the
 	# tags that will be changed album-wise (multiple tag)
 	for first_flac in "${album_flacs_array[0]}" ; do
@@ -213,332 +306,367 @@ for current_directory in "${!flac_directories[@]}" ; do
 			printf "%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" "      " "MASTERING:" " " "${MASTERING}"
 		fi
 	done
+}
+
+# Display each tag field with a prompt to the user to
+# "possibly" change the current tag using BASH's builtin
+# support for GNU readline
+__change_album_tags () {
+	if [[ "${ARTIST}" == "<empty>" ]] ; then
+		ARTIST=""
+	fi
+
+	__place_cursor "${current_line}" 7
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"         " "ARTIST:"
+	read -r -e -i "${ARTIST}" -p " " artist_tag 
+
+	if [[ "${ARTIST}" != "${artist_tag}" ]] ; then
+		if [[ -z "${ARTIST}" ]] ; then
+			ARTIST="<empty> -> ${artist_tag}"
+		else
+			ARTIST="${ARTIST} -> ${artist_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 7
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "ARTIST:" " " "${ARTIST}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${ALBUM}" == "<empty>" ]] ; then
+		ALBUM=""
+	fi
+
+	__place_cursor "${current_line}" 8
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"          " "ALBUM:"
+	read -r -e -i "${ALBUM}" -p " " album_tag
+
+	if [[ "${ALBUM}" != "${album_tag}" ]] ; then
+		if [[ -z "${ALBUM}" ]] ; then
+			ALBUM="<empty> -> ${album_tag}"
+		else
+			ALBUM="${ALBUM} -> ${album_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}"  8
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "ALBUM:" " " "${ALBUM}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${DISCNUMBER}" == "<empty>" ]] ; then
+		DISCNUMBER=""
+	fi
+
+	__place_cursor "${current_line}" 3
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"     " "DISCNUMBER:"
+	read -r -e -i "${DISCNUMBER}" -p " " discnumber_tag
+
+	if [[ "${DISCNUMBER}" != "${discnumber_tag}" ]] ; then
+		if [[ -z "${DISCNUMBER}" ]] ; then
+			DISCNUMBER="<empty> -> ${discnumber_tag}"
+		else
+			DISCNUMBER="${DISCNUMBER} -> ${discnumber_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 3
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "DISCNUMBER:" " " "${DISCNUMBER}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${DATE}" == "<empty>" ]] ; then
+		DATE=""
+	fi
+
+	__place_cursor "${current_line}" 9
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"           " "DATE:"
+	read -r -e -i "${DATE}" -p " " date_tag
+
+	if [[ "${DATE}" != "${date_tag}" ]] ; then
+		if [[ -z "${DATE}" ]] ; then
+			DATE="<empty> -> ${date_tag}"
+		else
+			DATE="${DATE} -> ${date_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 9
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "DATE:" " " "${DATE}"
+	__place_cursor "${total_lines}" 0
+
+	printf "\033[K"
+
+	((current_line++))
+
+	if [[ "${TRACKTOTAL}" == "<empty>" ]] ; then
+		TRACKTOTAL=""
+	fi
+
+	__place_cursor "${current_line}" 3
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"     " "TRACKTOTAL:"
+	read -r -e -i "${TRACKTOTAL}" -p " " tracktotal_tag
+
+	if [[ "${TRACKTOTAL}" != "${tracktotal_tag}" ]] ; then
+		if [[ -z "${TRACKTOTAL}" ]] ; then
+			TRACKTOTAL="<empty> -> ${tracktotal_tag}"
+		else
+			TRACKTOTAL="${TRACKTOTAL} -> ${tracktotal_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 3
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "TRACKTOTAL:" " " "${TRACKTOTAL}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${GENRE}" == "<empty>" ]] ; then
+		GENRE=""
+	fi
+
+	__place_cursor "${current_line}" 8
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"          " "GENRE:"
+	read -r -e -i "${GENRE}" -p " " genre_tag
+
+	if [[ "${GENRE}" != "${genre_tag}" ]] ; then
+		if [[ -z "${GENRE}" ]] ; then
+			GENRE="<empty> -> ${genre_tag}"
+		else
+			GENRE="${GENRE} -> ${genre_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 8
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "GENRE:" " " "${GENRE}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${RELEASETYPE}" == "<empty>" ]] ; then
+		RELEASETYPE=""
+	fi
+
+	__place_cursor "${current_line}" 2
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"    " "RELEASETYPE:"
+	read -r -e -i "${RELEASETYPE}" -p " " releasetype_tag
+
+	if [[ "${RELEASETYPE}" != "${releasetype_tag}" ]] ; then
+		if [[ -z "${RELEASETYPE}" ]] ; then
+			RELEASETYPE="<empty> -> ${releasetype_tag}"
+		else
+			RELEASETYPE="${RELEASETYPE} -> ${releasetype_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 2
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "RELEASETYPE:" " " "${RELEASETYPE}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${SOURCE}" == "<empty>" ]] ; then
+		SOURCE=""
+	fi
+
+	__place_cursor "${current_line}" 7
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"         " "SOURCE:"
+	read -r -e -i "${SOURCE}" -p " " source_tag
+
+	if [[ "${SOURCE}" != "${source_tag}" ]] ; then
+		if [[ -z "${SOURCE}" ]] ; then
+			SOURCE="<empty> -> ${source_tag}"
+		else
+			SOURCE="${SOURCE} -> ${source_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 7
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "SOURCE:" " " "${SOURCE}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((current_line++))
+
+	if [[ "${MASTERING}" == "<empty>" ]] ; then
+		MASTERING=""
+	fi
+
+	__place_cursor "${current_line}" 4
+	printf "${BOLD_GREEN}%s${NORMAL}" "->"
+	__place_cursor "${total_lines}" 0
+
+	printf "%s${CYAN}%s${NORMAL}" \
+	"      " "MASTERING:"
+	read -r -e -i "${MASTERING}" -p " " mastering_tag
+
+	if [[ "${MASTERING}" != "${mastering_tag}" ]] ; then
+		if [[ -z "${MASTERING}" ]] ; then
+			MASTERING="<empty> -> ${mastering_tag}"
+		else
+			MASTERING="${MASTERING} -> ${mastering_tag}"
+		fi
+	fi
+
+	__place_cursor "${current_line}" 4
+	printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
+	" " "*" " " "MASTERING:" " " "${MASTERING}"
+	__place_cursor "${total_lines}" 0
+
+	__clear_line
+
+	((total_lines++))
+}
+
+# List the FLAC files in the current directory with
+# the song length of each FLAC file
+__list_files () {
+	for flac in "${!album_flacs_array[@]}" ; do
+		# Print current FLAC file with song length
+		LENGTH="$(shntool len -ct "${album_flacs_array[${flac}]}")"
+		LENGTH="${LENGTH%%.*}"
+		LENGTH="${LENGTH#     }"
+		printf "\r\033[K%s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+		"    " "${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
+	done
+}
+
+# Top banner displaying current working directory
+__banner () {
+	printf "${BOLD_GREEN}%s${NORMAL}\n" " ${flac_directories[${current_directory}]##*/}"
+}
+
+# This is the directory to process FLACs
+directory="${1%/}"
+
+# Find all the FLAC files and store in an array
+total_flacs_array=( "${directory}"/**/*.[Ff][Ll][Aa][Cc] )
+
+# Find all the directories to process (ie albums)
+for i in "${total_flacs_array[@]}" ; do
+	if [[ "${processed_directory}" != "${i%/*}" ]] ; then
+		flac_directories+=( "${i%/*}" )
+	fi
+	processed_directory="${i%/*}"
+done
+
+# This will iterate through each directory and on each
+# directory, do some processing
+for current_directory in "${!flac_directories[@]}" ; do
+
+	# Clear the screen
+	printf "\033c"
+
+	# Display current directory
+	__banner
+
+	# Show album tagging title
+	printf "%s\n\n" "Album Tagging"
+
+	# Total lines used so far in the header/banner, including
+	# the start of the first tag field
+	total_lines="4"
+
+	# All the FLAC files in the current processed directory
+	album_flacs_array=( "${flac_directories[${current_directory}]}"/**/*.[Ff][Ll][Aa][Cc] )
+
+	# Display the album metadata with the current
+	# tags found for each field
+	__display_album_tags
 
 	# Separator line
-	printf "%s\n" "---------------------------------------------------------------------------"
+	printf "%s${BOLD_BLUE}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
 
-	current_line=4
+	# Total number of lines used thus far (banner, tag fields, spacing)
 	total_lines=14
+
+	# The current line is the current tag field being processed (with ->)
+	# used in the below function when reading/setting new tags
+	current_line=4
+
+	# Display each album field with user prompt
+	__change_album_tags
 
 	# Display each tag to change (from the first FLAC file) and display
 	# a prompt giving the user a chance to change the tag found.  This will
 	# then be reflected back up in the previous listing
 	for first_flac in "${album_flacs_array[0]}" ; do
 
-		if [[ "${ARTIST}" == "<empty>" ]] ; then
-			ARTIST=""
-		fi
+		# Prompt user whether album metadata should be saved and
+		# continue with the file metadata
+		__save_album_tags_prompt
 
-		__place_cursor "${current_line}" 7
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
+		printf "\n%s\n\n" "Individual File Metadata"
 
-		printf "%s${CYAN}%s${NORMAL}" \
-		"         " "ARTIST:"
-		read -r -e -i "${ARTIST}" -p " " artist_tag 
-
-		if [[ "${ARTIST}" != "${artist_tag}" ]] ; then
-			if [[ -z "${ARTIST}" ]] ; then
-				ARTIST="<empty> -> ${artist_tag}"
-			else
-				ARTIST="${ARTIST} -> ${artist_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 7
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "ARTIST:" " " "${ARTIST}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${ALBUM}" == "<empty>" ]] ; then
-			ALBUM=""
-		fi
-
-		__place_cursor "${current_line}" 8
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"          " "ALBUM:"
-		read -r -e -i "${ALBUM}" -p " " album_tag
-
-		if [[ "${ALBUM}" != "${album_tag}" ]] ; then
-			if [[ -z "${ALBUM}" ]] ; then
-				ALBUM="<empty> -> ${album_tag}"
-			else
-				ALBUM="${ALBUM} -> ${album_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}"  8
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "ALBUM:" " " "${ALBUM}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${DISCNUMBER}" == "<empty>" ]] ; then
-			DISCNUMBER=""
-		fi
-
-		__place_cursor "${current_line}" 3
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"     " "DISCNUMBER:"
-		read -r -e -i "${DISCNUMBER}" -p " " discnumber_tag
-
-		if [[ "${DISCNUMBER}" != "${discnumber_tag}" ]] ; then
-			if [[ -z "${DISCNUMBER}" ]] ; then
-				DISCNUMBER="<empty> -> ${discnumber_tag}"
-			else
-				DISCNUMBER="${DISCNUMBER} -> ${discnumber_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 3
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "DISCNUMBER:" " " "${DISCNUMBER}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${DATE}" == "<empty>" ]] ; then
-			DATE=""
-		fi
-
-		__place_cursor "${current_line}" 9
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"           " "DATE:"
-		read -r -e -i "${DATE}" -p " " date_tag
-
-		if [[ "${DATE}" != "${date_tag}" ]] ; then
-			if [[ -z "${DATE}" ]] ; then
-				DATE="<empty> -> ${date_tag}"
-			else
-				DATE="${DATE} -> ${date_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 9
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "DATE:" " " "${DATE}"
-		__place_cursor "${total_lines}" 0
-
-		printf "\033[K"
-
-		((current_line++))
-
-		if [[ "${TRACKTOTAL}" == "<empty>" ]] ; then
-			TRACKTOTAL=""
-		fi
-
-		__place_cursor "${current_line}" 3
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"     " "TRACKTOTAL:"
-		read -r -e -i "${TRACKTOTAL}" -p " " tracktotal_tag
-
-		if [[ "${TRACKTOTAL}" != "${tracktotal_tag}" ]] ; then
-			if [[ -z "${TRACKTOTAL}" ]] ; then
-				TRACKTOTAL="<empty> -> ${tracktotal_tag}"
-			else
-				TRACKTOTAL="${TRACKTOTAL} -> ${tracktotal_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 3
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "TRACKTOTAL:" " " "${TRACKTOTAL}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${GENRE}" == "<empty>" ]] ; then
-			GENRE=""
-		fi
-
-		__place_cursor "${current_line}" 8
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"          " "GENRE:"
-		read -r -e -i "${GENRE}" -p " " genre_tag
-
-		if [[ "${GENRE}" != "${genre_tag}" ]] ; then
-			if [[ -z "${GENRE}" ]] ; then
-				GENRE="<empty> -> ${genre_tag}"
-			else
-				GENRE="${GENRE} -> ${genre_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 8
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "GENRE:" " " "${GENRE}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${RELEASETYPE}" == "<empty>" ]] ; then
-			RELEASETYPE=""
-		fi
-
-		__place_cursor "${current_line}" 2
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"    " "RELEASETYPE:"
-		read -r -e -i "${RELEASETYPE}" -p " " releasetype_tag
-
-		if [[ "${RELEASETYPE}" != "${releasetype_tag}" ]] ; then
-			if [[ -z "${RELEASETYPE}" ]] ; then
-				RELEASETYPE="<empty> -> ${releasetype_tag}"
-			else
-				RELEASETYPE="${RELEASETYPE} -> ${releasetype_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 2
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "RELEASETYPE:" " " "${RELEASETYPE}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${SOURCE}" == "<empty>" ]] ; then
-			SOURCE=""
-		fi
-
-		__place_cursor "${current_line}" 7
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"         " "SOURCE:"
-		read -r -e -i "${SOURCE}" -p " " source_tag
-
-		if [[ "${SOURCE}" != "${source_tag}" ]] ; then
-			if [[ -z "${SOURCE}" ]] ; then
-				SOURCE="<empty> -> ${source_tag}"
-			else
-				SOURCE="${SOURCE} -> ${source_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 7
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "SOURCE:" " " "${SOURCE}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((current_line++))
-
-		if [[ "${MASTERING}" == "<empty>" ]] ; then
-			MASTERING=""
-		fi
-
-		__place_cursor "${current_line}" 4
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
-		__place_cursor "${total_lines}" 0
-
-		printf "%s${CYAN}%s${NORMAL}" \
-		"      " "MASTERING:"
-		read -r -e -i "${MASTERING}" -p " " mastering_tag
-
-		if [[ "${MASTERING}" != "${mastering_tag}" ]] ; then
-			if [[ -z "${MASTERING}" ]] ; then
-				MASTERING="<empty> -> ${mastering_tag}"
-			else
-				MASTERING="${MASTERING} -> ${mastering_tag}"
-			fi
-		fi
-
-		__place_cursor "${current_line}" 4
-		printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}" \
-		" " "*" " " "MASTERING:" " " "${MASTERING}"
-		__place_cursor "${total_lines}" 0
-
-		__clear_line
-
-		((total_lines++))
-
-		while read -e -r -p " Tag all the files in ${flac_directories[${current_directory}]##*/}? " ; do
-			case "${REPLY}" in
-				[Yy] | "")
-					#__retag
-					retag_files="true"
-					#exit 0
-					break
-				;;
-				[Yy][Ee][Ss])
-					retag_files="true"
-					#exit 0
-					#__retag
-					break
-				;;
-				[Nn])
-					#__redo_directory
-					#exit 0
-					#__retag
-					break
-				;;
-				[Nn][Oo])
-					#__redo_directory
-					#exit 0
-					#__retag
-					break
-				;;
-				*)
-					printf "%s\n" "Unknown answer: ${REPLY}"
-				;;
-			esac
-		done
-
-		__place_cursor "$(( ${total_lines} - 2 ))" 0
-		printf "\r\033[K"
-		__place_cursor "$(( ${total_lines} - 1 ))" 0
-		printf "\r\033[K"
-
-		printf "%s\n\n" "Individual File Metadata"
-
-		for flac in "${!album_flacs_array[@]}" ; do
-			# Print current FLAC file with song length
-			LENGTH="$(shntool len -ct "${album_flacs_array[${flac}]}")"
-			LENGTH="${LENGTH%%.*}"
-			LENGTH="${LENGTH#     }"
-			printf "\r\033[K%s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
-			"    " "${LENGTH}" " " "${album_flacs_array[${flac}]##*/}"
-		done
+		# Show a listing of FLAC files in current directory
+		__list_files
 
 		# Separator line
-		printf "%s\n" "---------------------------------------------------------------------------"
+		printf "%s${BOLD_BLUE}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
 
-		current_line="$(( ${total_lines} + 1 ))"
-		total_lines="$(( ${total_lines} + ${#album_flacs_array[@]} + 2 ))"
+		# The current line is the total lines so far (without the FLAC file
+		# listing plus 3 for spacing)
+		current_line="$(( ${total_lines} + 3 ))"
+
+		# Total number of lines used thus far (banner, tag fields,
+		# spacing, # of flac files)
+		total_lines="$(( ${total_lines} + ${#album_flacs_array[@]} + 4 ))"
 
 		for flac in "${!album_flacs_array[@]}" ; do
 			# Print current FLAC file with song length
@@ -589,39 +717,13 @@ for current_directory in "${!flac_directories[@]}" ; do
 			((current_line++))
 		done
 
-		printf "\r\033[K\n"
-	
-		while read -e -r -p " Tag all the files in ${flac_directories[${current_directory}]##*/}? " ; do
-			case "${REPLY}" in
-				[Yy] | "")
-					#__retag
-					retag_files="true"
-					#exit 0
-					break
-				;;
-				[Yy][Ee][Ss])
-					retag_files="true"
-					#exit 0
-					#__retag
-					break
-				;;
-				[Nn])
-					#__redo_directory
-					#exit 0
-					#__retag
-					break
-				;;
-				[Nn][Oo])
-					#__redo_directory
-					#exit 0
-					#__retag
-					break
-				;;
-				*)
-					printf "%s\n" "Unknown answer: ${REPLY}"
-				;;
-			esac
-		done
+		# Prompt user whether file metadata should be saved
+		# continuing on with final prompt
+		__save_file_tags_prompt
+
+		# Final prompt to decide whether metadata should be
+		# applied to all files in the current directory
+		__tag_directory_final_prompt
 
 	done
 done
