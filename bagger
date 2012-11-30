@@ -6,11 +6,12 @@ shopt -s globstar
 # Enable colors
 BOLD_BLUE="\033[1;34m"
 BOLD_GREEN="\033[1;32m"
-BOLD_RED="\033[1;31m"
-CYAN="\033[0;36m"
-MAGENTA="\033[0;35m"
-YELLOW="\033[0;33m"
+BOLD_RED="\033[31m"
+CYAN="\033[36m"
+MAGENTA="\033[35m"
+YELLOW="\033[33m"
 NORMAL="\033[0m"
+
 
 __save_screen () {
 	printf "\033[?1049h"
@@ -29,6 +30,111 @@ __place_cursor () {
 
 __clear_line () {
 	printf "\033[K"
+}
+
+# Obtain the song length of the current FLAC file
+__song_length () {
+	# Obtain the total number of samples in current file
+    total_samples="$(metaflac --show-total-samples "${album_flacs_array[${flac}]}")"
+
+    # Obtain the sample rate in current file
+    sample_rate="$(metaflac --show-sample-rate "${album_flacs_array[${flac}]}")"
+
+    # This the total number of time in minutes (with the decimal [seconds]
+    # moved to the right 3 places to account for non integer division
+    total_time_in_minutes_with_decimal_moved="$(( ${total_samples} * 1000 / ${sample_rate} / 60 ))"
+
+    # This is the total number of minutes (moves the decimal
+    # back to the left 3 places and culls the 'decimal')
+    total_minutes="$(( ${total_time_in_minutes_with_decimal_moved} / 1000 ))"
+
+    # If the song is really short (less than a minute, do not offset the
+    # string when obtaining just the remaining song time
+    #
+    # This is essentiall a percentage decimal (eg .832) but with the
+    # decimal moved 3 places to the right
+    if [[ "${total_minutes}" -eq 0 ]] ; then
+        remaining_time_decimal_percentage="${total_time_in_minutes_with_decimal_moved}"
+    else
+        remaining_time_decimal_percentage="${total_time_in_minutes_with_decimal_moved:${#total_minutes}}"
+    fi
+
+    # Remove any leading zeroes from the remaining time so BASH can
+    # successfully multiply the time without thinking the number is
+    # an octal number
+    #
+    # (eg. 078 -> 78 or 008 -> 08)
+    remaining_time_decimal_percentage="${remaining_time_decimal_percentage#0}"
+    # (eg. 08 -> 8)
+    remaining_time_decimal_percentage="${remaining_time_decimal_percentage#0}"
+
+    # This is the remaining time 'percentage' multiplied by 60 to obtain the
+    # total seconds (again, the decimal is moved 3 places to the right)
+    remaining_seconds_unformatted="$(( ${remaining_time_decimal_percentage} * 60 ))"
+
+    # Check the string length of the remaining seconds and prepend
+    # the necessary amount of zeroes to ensure we always end
+    # up with exactly five (5) characters (for consistency)
+    case "${#remaining_seconds_unformatted}" in
+        5)
+            # Do nothing
+            :
+        ;;
+        4)
+            remaining_seconds_unformatted="0${remaining_seconds_unformatted}"
+        ;;
+        3)
+            remaining_seconds_unformatted="00${remaining_seconds_unformatted}"
+        ;;
+        2)
+            remaining_seconds_unformatted="000${remaining_seconds_unformatted}"
+        ;;
+        1)
+            remaining_seconds_unformatted="0000${remaining_seconds_unformatted}"
+        ;;
+        0)
+            remaining_seconds_unformatted="00000${remaining_seconds_unformatted}"
+        ;;
+        *)
+            # Should NOT ever happen
+            printf "%s\n" "This is a bug!"
+            exit 1
+        ;;
+    esac
+
+    # This is the total number of seconds obtained from the
+    # above string: ${remaining_seconds_unformatted}, with the
+    # extra 'decimal places' removed
+    total_seconds="${remaining_seconds_unformatted:0:2}"
+
+    # This is the value right after the remaining seconds last
+    # digit, essentially a decimal number.  This will be
+    # used to round up or down.
+    round_up_value="${remaining_seconds_unformatted:2:1}"
+
+    # If ${round_up_value} is greater or equal to five (5),
+    # round up by adding one to the total seconds
+    if [[ "${round_up_value}" -ge 5 ]] ; then
+        total_seconds="${total_seconds#0}"
+        ((total_seconds++))
+    fi
+
+    # If the total seconds is only one digit (eg. 0-9), then
+    # prepend a zero in front to allow consistent spacing
+    if [[ "${#total_seconds}" -eq 1 ]] ; then
+        total_seconds="0${total_seconds}"
+    fi
+
+    # If the total seconds is 60 (as a result of rounding up),
+    # then set the total seconds to '00' (for formatting) and add
+    # one to the total minutes
+    if [[ "${total_seconds}" == "60" ]] ; then
+        total_seconds=00
+        ((total_minutes++))
+    fi
+
+    # This will print the resultant song length
+    printf "%s" "${total_minutes}:${total_seconds}"
 }
 
 __save_album_tags_prompt () {
@@ -60,25 +166,25 @@ __save_album_tags_prompt () {
 	done
 }
 
-__save_file_tags_prompt () {
+__save_track_tags_prompt () {
 	printf "\n\033[K%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
 	" Save " "track" " METADATA? [" "Yes" "/" "No" "] "
 	while read -e -r ; do
 		case "${REPLY}" in
 			[Yy] | "")
-				retag_files="true"
+				retag_tracks="true"
 				break
 			;;
 			[Yy][Ee][Ss])
-				retag_files="true"
+				retag_tracks="true"
 				break
 			;;
 			[Nn])
-				retag_files="false"
+				retag_tracks="false"
 				break
 			;;
 			[Nn][Oo])
-				retag_files="false"
+				retag_tracks="false"
 				break
 			;;
 			*)
@@ -91,7 +197,7 @@ __save_file_tags_prompt () {
 
 __tag_directory_final_prompt () {
 	# Separator line
-	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
+	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄"
 
 	# The total number of lines to be used so far
 	total_lines=$(( ${current_line} + 4 ))
@@ -100,7 +206,7 @@ __tag_directory_final_prompt () {
 	__place_cursor "${total_lines}" 0
 
 	# Separator line
-	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
+	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
 
 	# Return the cursor positions to where it would normally
 	# be (after the first separator line
@@ -109,7 +215,11 @@ __tag_directory_final_prompt () {
 	# Prompt
 	printf "%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
 	" Tag " "all" " files in current directory? [" "Yes" "/" "No" "] "
-	while read -e -r ; do
+
+	# Place the next separator line below the upcoming prompt
+	__place_cursor "$(( ${total_lines} - 1 ))" 47
+
+	while read -r ; do
 		case "${REPLY}" in
 			[Yy] | "")
 				__retag_album
@@ -600,9 +710,7 @@ __change_album_tags () {
 __list_files () {
 	for flac in "${!album_flacs_array[@]}" ; do
 		# Print current FLAC file with song length
-		LENGTH="$(shntool len -ct "${album_flacs_array[${flac}]}")"
-		LENGTH="${LENGTH%%.*}"
-		LENGTH="${LENGTH#     }"
+		LENGTH="$(__song_length)"
 		printf "\r\033[K%s${BOLD_BLUE}%s${NORMAL}%s\n" \
 		"    " "${LENGTH}" " ${album_flacs_array[${flac}]##*/}"
 	done
@@ -641,52 +749,52 @@ number_of_directories="${#flac_directories[@]}"
 # directory, do some processing
 for current_directory in "${!flac_directories[@]}" ; do
 
-	# Clear the screen
-	__clear_screen
+	until [[ "${retag_album}" == "true" ]] ; do
+		# Clear the screen
+		__clear_screen
 
-	# Display current directory
-	__banner
+		# Display current directory
+		__banner
 
-	# Show album tagging title
-	printf "%8s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}\n" \
-	"" "│" " " "Album Metadata" " " "│"
+		# Show album tagging title
+		printf "%8s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}\n" \
+		"" "│" " " "Album Metadata" " " "│"
 
-	printf "%8s${BOLD_BLUE}%s${NORMAL}\n" \
-	"" "└────────────────┘"
+		printf "%8s${BOLD_BLUE}%s${NORMAL}\n" \
+		"" "└────────────────┘"
 
-	# Total lines used so far in the header/banner, including
-	# the start of the first tag field
-	total_lines="4"
+		# Total lines used so far in the header/banner, including
+		# the start of the first tag field
+		total_lines="4"
 
-	# All the FLAC files in the current processed directory
-	album_flacs_array=( "${flac_directories[${current_directory}]}"/**/*.[Ff][Ll][Aa][Cc] )
+		# All the FLAC files in the current processed directory
+		album_flacs_array=( "${flac_directories[${current_directory}]}"/**/*.[Ff][Ll][Aa][Cc] )
 
-	# Display the album metadata with the current
-	# tags found for each field
-	__display_album_tags
+		# Display the album metadata with the current
+		# tags found for each field
+		__display_album_tags
 
-	# Separator line
-	printf "%s${BOLD_BLUE}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
+		# Separator line
+		printf "%s${BOLD_BLUE}%s${NORMAL}\n" " " "───────────────────────────────────────────────────"
 
-	# Total number of lines used thus far (banner, tag fields, spacing)
-	total_lines=15
+		# Total number of lines used thus far (banner, tag fields, spacing)
+		total_lines=15
 
-	# The current line is the current tag field being processed (with ->)
-	# used in the below function when reading/setting new tags
-	current_line=5
+		# The current line is the current tag field being processed (with ->)
+		# used in the below function when reading/setting new tags
+		current_line=5
 
-	# Display each album field with user prompt
-	__change_album_tags
-
-	# Display each tag to change (from the first FLAC file) and display
-	# a prompt giving the user a chance to change the tag found.  This will
-	# then be reflected back up in the previous listing
-	for first_flac in "${album_flacs_array[0]}" ; do
+		# Display each album field with user prompt
+		__change_album_tags
 
 		# Prompt user whether album metadata should be saved and
 		# continue with the file metadata
 		__save_album_tags_prompt
+	done
 
+	#until [[ "${retag_tracks}" == "true" ]] ; do
+
+		# If user had previously specified "No" in the previous prompt
 		# Show album tagging title
 		# Separator line
 		printf "%s${BOLD_BLUE}%s${NORMAL}\n" \
@@ -718,9 +826,7 @@ for current_directory in "${!flac_directories[@]}" ; do
 			declare -A individual_metadata_array
 
 			# Print current FLAC file with song length
-			LENGTH="$(shntool len -ct "${album_flacs_array[${flac}]}")"
-			LENGTH="${LENGTH%%.*}"
-			LENGTH="${LENGTH#     }"
+			LENGTH="$(__song_length)"
 
 			__place_cursor "${current_line}" 2
 			printf "${BOLD_GREEN}%s${NORMAL}" "->"
@@ -775,13 +881,13 @@ for current_directory in "${!flac_directories[@]}" ; do
 
 		# Prompt user whether file metadata should be saved
 		# continuing on with final prompt
-		__save_file_tags_prompt
+		__save_track_tags_prompt
+	#done
 
-		# Final prompt to decide whether metadata should be
-		# applied to all files in the current directory
-		__tag_directory_final_prompt
+	# Final prompt to decide whether metadata should be
+	# applied to all files in the current directory
+	__tag_directory_final_prompt
 
-	done
 done
 
 # Restore screen settings
