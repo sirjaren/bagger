@@ -23,9 +23,9 @@ shopt -s globstar
 VERSION="0.1"
 
 # Enable colors
-BOLD_BLUE="\033[1;34m"
-BOLD_GREEN="\033[1;32m"
-BOLD_RED="\033[31m"
+BLUE="\033[34m"
+GREEN="\033[32m"
+RED="\033[31m"
 CYAN="\033[36m"
 MAGENTA="\033[35m"
 YELLOW="\033[33m"
@@ -65,125 +65,191 @@ __clear_line () {
 #  BANNERS
 #==============================================
 __top_banner () {
-	printf "${BOLD_GREEN}%52s\r%s${CYAN}%s${NORMAL}\n" \
+	printf "${GREEN}%52s\r%s${CYAN}%s${NORMAL}\n" \
 	"${flac_directories[${current_directory}]##*/}" " " "[$(( ${current_directory} + 1 ))/${number_of_directories}]"
 
 	# Separator line
-	printf "%s${BOLD_BLUE}%s${NORMAL}\n" \
+	printf "%s${BLUE}%s${NORMAL}\n" \
 	" " "───────┬────────────────┬──────────────────────────"
 }
 
 
 __album_banner () {
-	printf "%8s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}\n" \
+	printf "%8s${BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BLUE}%s${NORMAL}\n" \
 	"" "│" " " "Album Metadata" " " "│"
 
-	printf "%8s${BOLD_BLUE}%s${NORMAL}\n" \
+	printf "%8s${BLUE}%s${NORMAL}\n" \
 	"" "└────────────────┘"
 }
 
 __track_banner () {
-	printf "%s${BOLD_BLUE}%s${NORMAL}\n" \
+	printf "%s${BLUE}%s${NORMAL}\n" \
 	" " "──┬───────────────────────────┬────────────────────"
 
-	printf "%3s${BOLD_BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}\n" \
+	printf "%3s${BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BLUE}%s${NORMAL}\n" \
 	"" "│" " " "Individual Track Metadata" " " "│"
 
-	printf "%3s${BOLD_BLUE}%s${NORMAL}\n" \
+	printf "%3s${BLUE}%s${NORMAL}\n" \
 	"" "└───────────────────────────┘"
 }
 
 #  ALBUM MANIPULATION
 #==============================================
 __display_album_tags () {
-	# Store all the tag metadata into an array
-	album_metadata_array=( ARTIST ALBUM DISCNUMBER DATE TRACKTOTAL GENRE RELEASETYPE SOURCE MASTERING )
+	# Store all the tag fields into an array
+	album_tag_field_array=( ARTIST ALBUM DISCNUMBER DATE TRACKTOTAL GENRE RELEASETYPE SOURCE MASTERING )
 
-	# Pick the first FLAC file in the current directory and display all the
-	# tags that will be changed album-wise (multiple tag)
-	for first_flac in "${album_flacs_array[0]}" ; do
+	# Go through each FLAC file in the current directory and obtain all the
+	# tags that will be changed album-wise (batch tag).
+	mapfile -n0 -t metaflac_tag_array < \
+	<(metaflac \
+		--show-tag=ARTIST \
+		--show-tag=ALBUM \
+		--show-tag=DISCNUMBER \
+		--show-tag=DATE \
+		--show-tag=TRACKTOTAL \
+		--show-tag=GENRE \
+		--show-tag=RELEASETYPE \
+		--show-tag=SOURCE \
+		--show-tag=MASTERING \
+		"${album_flacs_array[@]}"
+	)
 
-		# Artist Tag
-		ARTIST="$(metaflac --show-tag=ARTIST "${first_flac}")"
-		ARTIST="${ARTIST#*=}"
+	# For each tag field (eg. ARTIST, DATE, etc), test for a value in one of the FLAC files
+	# in the current directory.  If the specified tag is found, start looking for the next
+	# tag field's value.  If a tag cannot found, try the next file (continuing on until all
+	# the files have been tried).
+	for tag_field in "${!album_tag_field_array[@]}" ; do
 
-		# Album Tag
-		ALBUM="$(metaflac --show-tag=ALBUM "${first_flac}")"
-		ALBUM="${ALBUM#*=}"
+		# ${tag} is a value like: ARTIST=Kamelot
+		for tag in "${metaflac_tag_array[@]##*.[Ff][Ll][Aa][Cc]:}" ; do
 
-		# Discnumber Tag
-		DISCNUMBER="$(metaflac --show-tag=DISCNUMBER "${first_flac}")"
-		DISCNUMBER="${DISCNUMBER#*=}"
+			# Removes tag value from ${tag}
+			# (eg. ARTIST=Kamelot -> ARTIST)
+			current_tag_field="${tag%=*}"
 
-		# Date Tag
-		DATE="$(metaflac --show-tag=DATE "${first_flac}")"
-		DATE="${DATE#*=}"
+			# If the current tag field from the top most for loop is the same as
+			# the ${current_tag_field} variable (upper case), then test for the
+			# tag value from that field.
+			if [[ "${album_tag_field_array[${tag_field}]}" == "${current_tag_field^^}" ]] ; then
 
-		# Tracktotal Tag
-		TRACKTOTAL="$(metaflac --show-tag=TRACKTOTAL "${first_flac}")"
-		TRACKTOTAL="${TRACKTOTAL#*=}"
+				# If tag value exists, store it in the appropriate tag
+				# field
+				if [[ -n "${tag#*=}" ]] ; then
 
-		# Genre Tag
-		GENRE="$(metaflac --show-tag=GENRE "${first_flac}")"
-		GENRE="${GENRE#*=}"
+					case "${album_tag_field_array[${tag_field}]}" in
+						ARTIST)
+							ARTIST="${tag#*=}"
+							break
+						;;
+						ALBUM)
+							ALBUM="${tag#*=}"
+							break
+						;;
+						DISCNUMBER)
+							DISCNUMBER="${tag#*=}"
+							break
+						;;
+						DATE)
+							DATE="${tag#*=}"
+							break
+						;;
+						TRACKTOTAL)
+							TRACKTOTAL="${tag#*=}"
 
-		# ReleaseType Tag
-		RELEASETYPE="$(metaflac --show-tag=RELEASETYPE "${first_flac}")"
-		RELEASETYPE="${RELEASETYPE#*=}"
+							# This is obtained by the # of FLAC files
+							# in the current directory, so skip grabbing
+							# the current value via FLAC files
+							#TRACKTOTAL_DYNAMIC="${#album_flacs_array[@]}"
+							break
+						;;
+						GENRE)
+							GENRE="${tag#*=}"
+							break
+						;;
+						RELEASETYPE)
+							RELEASETYPE="${tag#*=}"
+							break
+						;;
+						SOURCE)
+							SOURCE="${tag#*=}"
+							break
+						;;
+						MASTERING)
+							MASTERING="${tag#*=}"
+							break
+						;;
+					esac
 
-		# Source Tag
-		SOURCE="$(metaflac --show-tag=SOURCE "${first_flac}")"
-		SOURCE="${SOURCE#*=}"
+				fi
 
-		# Mastering Tag
-		MASTERING="$(metaflac --show-tag=MASTERING "${first_flac}")"
-		MASTERING="${MASTERING#*=}"
-
-		# Go through each tag field and print the tag field as well as the current
-		# value for that field
-		for album_tag in "${!album_metadata_array[@]}" ; do
-
-			# Set up spacing for each tag field
-			case "${album_metadata_array[${album_tag}]}" in
-				ARTIST)
-					SPACING="9"
-				;;
-				ALBUM)
-					SPACING="10"
-				;;
-				DISCNUMBER)
-					SPACING="5"
-				;;
-				DATE)
-					SPACING="11"
-				;;
-				TRACKTOTAL)
-					SPACING="5"
-				;;
-				GENRE)
-					SPACING="10"
-				;;
-				RELEASETYPE)
-					SPACING="4"
-				;;
-				SOURCE)
-					SPACING="9"
-				;;
-				MASTERING)
-					SPACING="6"
-				;;
-			esac
-
-			# If album tag value is null display <empty>, else display current value
-			if [[ -z "${!album_metadata_array[${album_tag}]}" ]] ; then
-				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" \
-				"" "${album_metadata_array[${album_tag}]}:" " " "<empty>"
-			else
-				printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
-				"" "${album_metadata_array[${album_tag}]}:" " ${!album_metadata_array[${album_tag}]}"
 			fi
 
 		done
+
+	done
+
+	# Go through each tag field and print the tag field as well as the current
+	# value for that field
+	for tag_field in "${!album_tag_field_array[@]}" ; do
+
+		# Set up spacing for each tag field
+		case "${album_tag_field_array[${tag_field}]}" in
+			ARTIST)
+				SPACING="9"
+			;;
+			ALBUM)
+				SPACING="10"
+			;;
+			DISCNUMBER)
+				SPACING="5"
+			;;
+			DATE)
+				SPACING="11"
+			;;
+			TRACKTOTAL)
+				SPACING="5"
+			;;
+			GENRE)
+				SPACING="10"
+			;;
+			RELEASETYPE)
+				SPACING="4"
+			;;
+			SOURCE)
+				SPACING="9"
+			;;
+			MASTERING)
+				SPACING="6"
+			;;
+		esac
+
+		# If the current tag field is TRACKTOTAL, display the value obtained
+		# from the FLAC file as well as the value determined from the number
+		# of FLAC files
+		if [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" ]] ; then
+
+			if [[ -n "${TRACKTOTAL}" ]] ; then
+				# Display TRACKTOTAL value and # of FLAC files
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+				"" "TRACKTOTAL:" " ${TRACKTOTAL} " "(${#album_flacs_array[@]} songs found)"
+			else
+				# Display '<empty>' and # of FLAC files
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+				"" "TRACKTOTAL:" " " "<empty>" " " "(${#album_flacs_array[@]} songs found)"
+			fi
+
+		# If other tag field's values are null, display <empty>, else display current value
+		elif [[ -z "${!album_tag_field_array[${tag_field}]}" ]] ; then
+			# Null, display: '<empty>'
+			printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" \
+			"" "${album_tag_field_array[${tag_field}]}:" " " "<empty>"
+		else
+			# Not empty, display tag value
+			printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
+			"" "${album_tag_field_array[${tag_field}]}:" " ${!album_tag_field_array[${tag_field}]}"
+		fi
+
 	done
 }
 
@@ -196,110 +262,56 @@ __change_album_tags () {
 	# value.
 	#
 	# Also, display current tag being edited (UI enhancements)
-	for album_tag in "${!album_metadata_array[@]}" ; do
+	for tag_field in "${!album_tag_field_array[@]}" ; do
 
 		# Set up spacing for the arrow displayed before
 		# each tag field as well as set up spacing for each
 		# tag field displayed as a prompt and initialize
 		# the new tag fields to be saved
-		case "${album_metadata_array[${album_tag}]}" in
+		case "${album_tag_field_array[${tag_field}]}" in
 			ARTIST)
-				# Tag spacing
 				spacing="9"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="7"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_artist="dont tag"
 			;;
 			ALBUM)
-				# Tag spacing
 				spacing="10"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="8"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_album="dont tag"
 			;;
 			DISCNUMBER)
-				# Tag spacing
 				spacing="5"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="3"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_discnumber="dont tag"
 			;;
 			DATE)
-				# Tag spacing
 				spacing="11"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="9"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_date="dont tag"
 			;;
 			TRACKTOTAL)
-				# Tag spacing
 				spacing="5"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="3"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_tracktotal="dont tag"
 			;;
 			GENRE)
-				# Tag spacing
 				spacing="10"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="8"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_genre="dont tag"
 			;;
 			RELEASETYPE)
-				# Tag spacing
 				spacing="4"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="2"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_releasetype="dont tag"
 			;;
 			SOURCE)
-				# Tag spacing
 				spacing="9"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="7"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_source="dont tag"
 			;;
 			MASTERING)
-				# Tag spacing
 				spacing="6"
-
-				# Spacing for arrow ( -> )
 				arrow_spacing="4"
-
-				# Initialize placeholder variable that the new
-				# tag will reside (if applicable)
 				new_mastering="dont tag"
 			;;
 		esac
@@ -308,58 +320,58 @@ __change_album_tags () {
 		__place_cursor "${current_line}" "${arrow_spacing}"
 
 		# Display arrow before current tag showing focus
-		printf "${BOLD_GREEN}%s${NORMAL}" "->"
+		printf "${GREEN}%s${NORMAL}" "->"
 
 		# Place cursor back at the bottom
 		__place_cursor "${total_lines}" 0
 	
 		printf "%${spacing}s${CYAN}%s${NORMAL}" \
-		"" "${album_metadata_array[${album_tag}]}:"
+		"" "${album_tag_field_array[${tag_field}]}:"
 
 		# Read in the new tag from the user with a prompt
-		read -r -e -i "${!album_metadata_array[${album_tag}]}" -p " " new_tag
+		read -r -e -i "${!album_tag_field_array[${tag_field}]}" -p " " new_tag
 
 		__place_cursor "${current_line}" "${arrow_spacing}"
 
 		# If the old tag is different from the new one
-		if [[ "${!album_metadata_array[${album_tag}]}" != "${new_tag}" ]] ; then
+		if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
 
 			# If the old tag is empty
-			if [[ -z "${!album_metadata_array[${album_tag}]}" ]] ; then
-				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}" \
-				" " "*" " " "${album_metadata_array[${album_tag}]}:" " " "${new_tag}" " <- " "<empty>"
+			if [[ -z "${!album_tag_field_array[${tag_field}]}" ]] ; then
+				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${new_tag}" " <- " "<empty>"
 
 			# If the new tag is empty
 			elif [[ -z "${new_tag}" ]] ; then
-				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}" \
-				" " "*" " " "${album_metadata_array[${album_tag}]}:" " " "<empty>"
+				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "<empty>"
 
 			# Display the old tag and the new tag differences
 			else
-				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}" \
-				" " "*" " " "${album_metadata_array[${album_tag}]}:" " " "${new_tag}" " <- " "${!album_metadata_array[${album_tag}]}"
+				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${new_tag}" " <- " "${!album_tag_field_array[${tag_field}]}"
 			fi
 
 		# If the old and new tag are the same and the new
 		# tag is empty
 		elif [[ -z "${new_tag}" ]] ; then
-			printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}" \
-			" " "*" " " "${album_metadata_array[${album_tag}]}:" " " "<empty>"
+			printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+			" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "<empty>"
 
 		# No difference from old tag to new tag, change the tag color
 		# to green
 		else
-			printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}" \
-			" " "*" " " "${album_metadata_array[${album_tag}]}:" " " "${!album_metadata_array[${album_tag}]}"
+			printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}" \
+			" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${!album_tag_field_array[${tag_field}]}"
 		fi
 
 		# If the value of the new tag is different from the old tag, save the
 		# new metadata, else skip it (this allows us to NOT retag files unnecessarily)
-		if [[ "${!album_metadata_array[${album_tag}]}" != "${new_tag}" ]] ; then
+		if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
 
 			# Save the new tag value to be used when tagging
 			# the files
-			case "${album_metadata_array[${album_tag}]}" in
+			case "${album_tag_field_array[${tag_field}]}" in
 				ARTIST)
 					new_artist="${new_tag}"
 				;;
@@ -509,13 +521,119 @@ __song_length () {
 # the song length of each FLAC file
 __list_tracks () {
 	for flac in "${!album_flacs_array[@]}" ; do
-		# Print current FLAC file with song length
-		LENGTH="$(__song_length)"
-		printf "\r\033[K%s${BOLD_BLUE}%s${NORMAL}%s\n" \
-		"    " "${LENGTH}" " ${album_flacs_array[${flac}]##*/}"
+		printf "\r\033[K%s${BLUE}%s${NORMAL}%s\n" \
+		"    " "$(__song_length)" " ${album_flacs_array[${flac}]##*/}"
 	done
 }
 
+__change_track_tags () {
+	for flac in "${!album_flacs_array[@]}" ; do
+
+		# Print current FLAC file with song length
+		LENGTH="$(__song_length)"
+
+		__place_cursor "${current_line}" 2
+		printf "${GREEN}%s${NORMAL}" "->"
+		__place_cursor "${total_lines}" 0
+
+		# Tracknumber Tag
+		TRACKNUMBER="$(metaflac --show-tag=TRACKNUMBER "${album_flacs_array[${flac}]}")"
+		TRACKNUMBER="${TRACKNUMBER#*=}"
+
+		# Title Tag
+		TITLE="$(metaflac --show-tag=TITLE "${album_flacs_array[${flac}]}")"
+		TITLE="${TITLE#*=}"
+
+		printf "\r\033[K%s${CYAN}%s${NORMAL}" \
+		" " "TRACKNUMBER / TITLE:"
+
+		# Read in new tracknumber and title tag via prompt
+		#
+		# If TRACKNUMBER and TITLE are both empty, don't display
+		# either tag (prevents space between two tags from appearing)
+		if [[ -z "${TRACKNUMBER}" && -z "${TITLE}" ]] ; then
+			read -r -e -a tracknumber_title_array -p " "
+
+		# If TRACKNUMBER is empty, just display TITLE tag
+		elif [[ -z "${TRACKNUMBER}" ]] ; then
+			read -r -e -a tracknumber_title_array -i "${TITLE}" -p " "
+
+		# Display both tags.  If TITLE is empty, the spacing will still
+		# be correct (eg. '01 ' < space after track number)
+		else
+			read -r -e -a tracknumber_title_array -i "${TRACKNUMBER} ${TITLE}" -p " "
+		fi
+
+		# Check to make sure tracknumber tag is a valid
+		# tracknumber (integer) that is either 1 or 2 digits
+		case "${tracknumber_title_array[0]}" in
+
+			# Valid tracknumber (single digit so prepend a 0)
+			[0-9])
+				new_tracknumber="0${tracknumber_title_array[0]}"
+				new_title="${tracknumber_title_array[@]:1}"
+			;;
+
+			# Valid tracknumber (double digit)
+			[0-9][0-9])
+				new_tracknumber="${tracknumber_title_array[0]}"
+				new_title="${tracknumber_title_array[@]:1}"
+			;;
+
+			# Invalid tracknumber
+			*)
+				new_tracknumber=""
+				new_title="${tracknumber_title_array[@]}"
+			;;
+
+		esac
+
+		__place_cursor "${current_line}" 0
+
+		# If both the new tags are NOT empty
+		if [[ -n "${new_tracknumber}" && -n "${new_title}" ]] ; then
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+			"  " "*" " " "${LENGTH}" " [ " "${new_tracknumber}" " ] " "${new_title}"
+
+		# If the new tracknumber tag is empty
+		elif [[ -z "${new_tracknumber}" && -n "${new_title}" ]] ; then
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+			"  " "*" " " "${LENGTH}" " [ " "??" " ] " "${new_title}"
+
+		# If the new title tag is empty
+		elif [[ -n "${new_tracknumber}" && -z "${new_title}" ]] ; then
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+			"  " "*" " " "${LENGTH}" " [ " "${new_tracknumber}" " ] " "<empty>"
+
+		# If both tags are empty
+		else
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${RED}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+			"  " "*" " " "${LENGTH}" " [ " "??" " ] " "<empty>"
+		fi
+
+		((current_line++))
+
+		# If the new metadata is NOT equal to the original metadata (eg. it's
+		# unchanged) and if the new metadata is NOT null, set that value into
+		# its own array.  Otherwise, set a dummy value of "dont tag" in order
+		# to preserve the same number of array indices as ${album_flacs_array[@]}
+		#
+		# TRACKNUMBER
+		if [[ -n "${new_tracknumber}" && "${new_tracknumber}" != "${TRACKNUMBER}" ]] ; then
+			new_tracknumber_array+=( "${new_tracknumber}" )
+		else
+			new_tracknumber_array+=( "dont tag" )
+		fi
+
+		# TITLE
+		if [[ -n "${new_title}" && "${new_title}" != "${TITLE}" ]] ; then
+			new_title_array+=( "${new_title}" )
+		else
+			new_title_array+=( "dont tag" )
+		fi
+
+	done
+}
 __reset_track_listing () {
 	# Reset ${current_line} to previous value
 	current_line="${current_line_backup}"
@@ -535,61 +653,79 @@ __reset_track_listing () {
 #  RETAGGING
 #==============================================
 __retag_album () {
-	# Only set tags if there was a new tag specified (eg. ${new_artist} deesn't
+	# Only set tags if there was a new tag specified (eg. ${new_artist} doesn't
 	# equal "dont tag"), otherwise skip tagging for that specific field and continue on
 
 	# Set new ARTIST tag
 	if [[ "${new_artist}" != "dont tag" ]] ; then
-		metaflac --remove-tag=ARTIST "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=ARTIST="${new_artist}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=ARTIST \
+				--set-tag=ARTIST="${new_artist}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new ALBUM tag
 	if [[ "${new_album}" != "dont tag" ]] ; then
-		metaflac --remove-tag=ALBUM "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=ALBUM="${new_album}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=ALBUM \
+				--set-tag=ALBUM="${new_album}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new DISCNUMBER tag
 	if [[ "${new_discnumber}" != "dont tag" ]] ; then
-		metaflac --remove-tag=DISCNUMBER "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=DISCNUMBER="${new_discnumber}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=DISCNUMBER \
+				--set-tag=DISCNUMBER="${new_discnumber}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new DATE tag
 	if [[ "${new_date}" != "dont tag" ]] ; then
-		metaflac --remove-tag=DATE "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=DATE="${new_date}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=DATE \
+				--set-tag=DATE="${new_date}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new TRACKTOTAL tag
 	if [[ "${new_tracktotal}" != "dont tag" ]] ; then
-		metaflac --remove-tag=TRACKTOTAL "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=TRACKTOTAL="${new_tracktotal}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=TRACKTOTAL \
+				--set-tag=TRACKTOTAL="${new_tracktotal}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new GENRE tag
 	if [[ "${new_genre}" != "dont tag" ]] ; then
-		metaflac --remove-tag=GENRE "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=GENRE="${new_genre}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=GENRE \
+				--set-tag=GENRE="${new_genre}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new RELEASETYPE tag
 	if [[ "${new_releasetype}" != "dont tag" ]] ; then
-		metaflac --remove-tag=RELEASETYPE "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=RELEASETYPE="${new_releasetype}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=RELEASETYPE \
+				--set-tag=RELEASETYPE="${new_releasetype}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new SOURCE tag
 	if [[ "${new_source}" != "dont tag" ]] ; then
-		metaflac --remove-tag=SOURCE "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=SOURCE="${new_source}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=SOURCE \
+				--set-tag=SOURCE="${new_source}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new MASTERING tag
 	if [[ "${new_mastering}" != "dont tag" ]] ; then
-		metaflac --remove-tag=MASTERING "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
-		metaflac --set-tag=MASTERING="${new_mastering}" "${flac_directories[${current_directory}]}"/*.[Ff][Ll][Aa][Cc]
+		metaflac \
+				--remove-tag=MASTERING \
+				--set-tag=MASTERING="${new_mastering}" \
+				"${album_flacs_array[@]}"
 	fi
 }
 
@@ -597,26 +733,30 @@ __retag_tracks () {
 	# Only set tags if there was a new tag specified, otherwise skip tagging
 	# for that specific field and continue on
 	for flac in "${!album_flacs_array[@]}" ; do
-	
-		# Current FLAC file
-		current_flac="${album_flacs_array[${flac}]##*/}"
 
-		# Grab the TRACKNUMBER and TITLE tags from the current FLAC file
-		# via the associate array: ${track_metadata_array[@]}.
-		tracknumber_tag="${track_metadata_array[${current_flac}_tracknumber]}"
-		title_tag="${track_metadata_array[${current_flac}_title]}"
+		# Obtain the TRACKNUMBER and TITLE tag from the current FLAC file via the
+		# new_<tracknumber|title>_array.  The indices of this array match up
+		# EXACTLY with the album_flacs_array above, removing the need for
+		# associative arrays
+		tracknumber_tag="${new_tracknumber_array[${flac}]}"
+		title_tag="${new_title_array[${flac}]}"
 
 		# Set new TRACKNUMBER tag
-		if [[ -n "${tracknumber_tag}" ]] ; then
-			metaflac --remove-tag=TRACKNUMBER "${album_flacs_array[${flac}]}"
-			metaflac --set-tag=TRACKNUMBER="${tracknumber_tag}" "${album_flacs_array[${flac}]}"
+		if [[ "${tracknumber_tag}" != "dont tag" ]] ; then
+			metaflac \
+					--remove-tag=TRACKNUMBER \
+					--set-tag=TRACKNUMBER="${tracknumber_tag}" \
+					"${album_flacs_array[${flac}]}"
 		fi
 
 		# Set new TITLE tag
-		if [[ -n "${title_tag}" ]] ; then
-			metaflac --remove-tag=TITLE "${album_flacs_array[${flac}]}"
-			metaflac --set-tag=TITLE="${title_tag}" "${album_flacs_array[${flac}]}"
+		if [[ "${title_tag}" != "dont tag" ]] ; then
+			metaflac \
+					--remove-tag=TITLE \
+					--set-tag=TITLE="${title_tag}" \
+					"${album_flacs_array[${flac}]}"
 		fi
+
 	done
 }
 
@@ -636,7 +776,7 @@ __tag_directory () {
 #  PROMPTS
 #==============================================
 __save_album_tags_prompt () {
-	printf "%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
+	printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
 	" Save " "album" " METADATA? [" "Yes" "/" "No" "] "
 	while read -e -r ; do
 		case "${REPLY}" in
@@ -649,15 +789,19 @@ __save_album_tags_prompt () {
 				break
 			;;
 			*)
-				printf "%s\n" "Unknown answer: ${REPLY}. Exiting..."
-				exit 1
+				# Unknown answer, clear prompt
+				printf "\033[A\033[K"
+
+				# Restate prompt
+				printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
+				" Save " "album" " METADATA? [" "Yes" "/" "No" "] "
 			;;
 		esac
 	done
 }
 
 __save_track_tags_prompt () {
-	printf "\n\033[K%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
+	printf "\n\033[K%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
 	" Save " "track" " METADATA? [" "Yes" "/" "No" "] "
 	while read -e -r ; do
 		case "${REPLY}" in
@@ -670,8 +814,12 @@ __save_track_tags_prompt () {
 				break
 			;;
 			*)
-				printf "%s\n" "Unknown answer: ${REPLY}. Exiting..."
-				exit 1
+				# Unknown answer, clear prompt
+				printf "\033[A\033[K"
+
+				# Restate prompt
+				printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
+				" Save " "track" " METADATA? [" "Yes" "/" "No" "] "
 			;;
 		esac
 	done
@@ -679,7 +827,8 @@ __save_track_tags_prompt () {
 
 __tag_directory_final_prompt () {
 	# Separator line
-	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄"
+	printf "%s${RED}%s${NORMAL}\n" \
+	" " "───────────────────────────────────────────────────"
 
 	# The total number of lines to be used so far
 	total_lines=$(( ${current_line} + 4 ))
@@ -688,14 +837,15 @@ __tag_directory_final_prompt () {
 	__place_cursor "${total_lines}" 0
 
 	# Separator line
-	printf "%s${BOLD_RED}%s${NORMAL}\n" " " "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+	printf "%s${RED}%s${NORMAL}\n" \
+	" " "───────────────────────────────────────────────────"
 
 	# Return the cursor positions to where it would normally
 	# be (after the first separator line
 	__place_cursor "$(( ${total_lines} - 1 ))" 0
 
 	# Prompt
-	printf "%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s" \
+	printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
 	" Tag " "all" " files in current directory? [" "Yes" "/" "No" "] "
 
 	# Place the next separator line below the upcoming prompt
@@ -705,11 +855,6 @@ __tag_directory_final_prompt () {
 		case "${REPLY}" in
 			[Yy] | [Yy][Ee][Ss] | "")
 				final_prompt="true"
-
-				# Finally go and tag the files in
-				# current directory
-				__tag_current_directory
-
 				break
 			;;
 			[Nn] | [Nn][Oo])
@@ -724,12 +869,12 @@ __tag_directory_final_prompt () {
 				break
 			;;
 			*)
-				printf "\n%s\n" "Unknown answer: ${REPLY}. Exiting..."
+				# Unknown answer, clear prompt
+				printf "\033[A\033[K"
 
-				# Restore screen settings
-				__restore_screen
-
-				exit 1
+				# Restate prompt
+				printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
+				" Tag " "all" " files in current directory? [" "Yes" "/" "No" "] "
 			;;
 		esac
 	done
@@ -777,13 +922,13 @@ done
 # Grab the number of directories found to process
 number_of_directories="${#flac_directories[@]}"
 
-#------------------------------------------------------------------
-#   CURRENT DIRECTORY START
-#------------------------------------------------------------------
 # This will iterate through each directory and on each
 # directory, do some processing
 for current_directory in "${!flac_directories[@]}" ; do
 
+	#------------------------------------------------------------------
+	#   CURRENT DIRECTORY START
+	#------------------------------------------------------------------
 	# Until user chooses "yes" at the final prompt
 	# go through and start the process of tagging the album
 	# from the beginning.  If "yes", go to the next album/directory
@@ -824,7 +969,7 @@ for current_directory in "${!flac_directories[@]}" ; do
 			__display_album_tags
 
 			# Separator line
-			printf "%s${BOLD_BLUE}%s${NORMAL}\n" \
+			printf "%s${BLUE}%s${NORMAL}\n" \
 			" " "───────────────────────────────────────────────────"
 
 			# Total number of lines used thus far (banner, tag fields, spacing)
@@ -883,123 +1028,11 @@ for current_directory in "${!flac_directories[@]}" ; do
 			__list_tracks
 
 			# Separator line
-			printf "%s${BOLD_BLUE}%s${NORMAL}\n" \
+			printf "%s${BLUE}%s${NORMAL}\n" \
 			" " "───────────────────────────────────────────────────"
 
-			#------------------------------------------------------------------
-			#   CHANGE TRACK TAGS VIA USER PROMPT
-			#------------------------------------------------------------------
-			# This _CANNOT_ be in a separate function, since the associative
-			# array at the bottom of the 'for' loop won't be availabe when
-			# trying to retag the files via '__retag_tracks' function
-
 			# Display each track tag field to change with user prompt
-			for flac in "${!album_flacs_array[@]}" ; do
-
-				# Declare an associative array to catalogue which files
-				# have which tags added
-				declare -A track_metadata_array
-
-				# Print current FLAC file with song length
-				LENGTH="$(__song_length)"
-
-				__place_cursor "${current_line}" 2
-				printf "${BOLD_GREEN}%s${NORMAL}" "->"
-				__place_cursor "${total_lines}" 0
-
-				# Tracknumber Tag
-				TRACKNUMBER="$(metaflac --show-tag=TRACKNUMBER "${album_flacs_array[${flac}]}")"
-				TRACKNUMBER="${TRACKNUMBER#*=}"
-
-				# Title Tag
-				TITLE="$(metaflac --show-tag=TITLE "${album_flacs_array[${flac}]}")"
-				TITLE="${TITLE#*=}"
-
-				printf "\r\033[K%s${CYAN}%s${NORMAL}" \
-				" " "TRACKNUMBER / TITLE:"
-
-				# Read in new tracknumber and title tag via prompt
-				#
-				# If TRACKNUMBER and TITLE are both empty, don't display
-				# either tag (prevents space between two tags from appearing)
-				if [[ -z "${TRACKNUMBER}" && -z "${TITLE}" ]] ; then
-					read -r -e -a tracknumber_title_array -p " "
-
-				# If TRACKNUMBER is empty, just display TITLE tag
-				elif [[ -z "${TRACKNUMBER}" ]] ; then
-					read -r -e -a tracknumber_title_array -i "${TITLE}" -p " "
-
-				# Display both tags.  If TITLE is empty, the spacing will still
-				# be correct (eg. '01 ' < space after track number)
-				else
-					read -r -e -a tracknumber_title_array -i "${TRACKNUMBER} ${TITLE}" -p " "
-				fi
-
-				# Check to make sure tracknumber tag is a valid
-				# tracknumber (integer) that is either 1 or 2 digits
-				case "${tracknumber_title_array[0]}" in
-
-					# Valid tracknumber (single digit so prepend a 0)
-					[0-9])
-						new_tracknumber="0${tracknumber_title_array[0]}"
-						new_title="${tracknumber_title_array[@]:1}"
-					;;
-
-					# Valid tracknumber (double digit)
-					[0-9][0-9])
-						new_tracknumber="${tracknumber_title_array[0]}"
-						new_title="${tracknumber_title_array[@]:1}"
-					;;
-
-					# Invalid tracknumber
-					*)
-						new_tracknumber=""
-						new_title="${tracknumber_title_array[@]}"
-					;;
-
-				esac
-
-				__place_cursor "${current_line}" 0
-
-				# If both the new tags are NOT empty
-				if [[ -n "${new_tracknumber}" && -n "${new_title}" ]] ; then
-					printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}\n" \
-					"  " "*" " " "${LENGTH}" " [ " "${new_tracknumber}" " ] " "${new_title}"
-
-				# If the new tracknumber tag is empty
-				elif [[ -z "${new_tracknumber}" && -n "${new_title}" ]] ; then
-					printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s${BOLD_GREEN}%s${NORMAL}\n" \
-					"  " "*" " " "${LENGTH}" " [ " "??" " ] " "${new_title}"
-
-				# If the new title tag is empty
-				elif [[ -n "${new_tracknumber}" && -z "${new_title}" ]] ; then
-					printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}\n" \
-					"  " "*" " " "${LENGTH}" " [ " "${new_tracknumber}" " ] " "<empty>"
-
-				# If both tags are empty
-				else
-					printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BOLD_BLUE}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}%s${BOLD_RED}%s${NORMAL}\n" \
-					"  " "*" " " "${LENGTH}" " [ " "??" " ] " "<empty>"
-				fi
-
-				((current_line++))
-
-				# Set the new metadata into the associative array for processing later
-				# only if the user set a NEW tag
-				#
-				# TRACKNUMBER
-				if [[ -n "${new_tracknumber}" && "${new_tracknumber}" != "${TRACKNUMBER}" ]] ; then
-					track_metadata_array+=( ["${album_flacs_array[${flac}]##*/}_tracknumber"]="${new_tracknumber}" )
-				fi
-
-				# TITLE
-				if [[ -n "${new_title}" && "${new_title}" != "${TITLE}" ]] ; then
-					track_metadata_array+=( ["${album_flacs_array[${flac}]##*/}_title"]="${new_title}" )
-				fi
-
-			done
-
-			#---END CHANGE TRACK TAGS-------------------------------------------
+			__change_track_tags
 
 			# Prompt user whether file metadata should be saved
 			# continuing on with final prompt
