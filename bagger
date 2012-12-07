@@ -31,6 +31,10 @@ MAGENTA="\033[35m"
 YELLOW="\033[33m"
 NORMAL="\033[0m"
 
+# This is where the renamed music files/directories
+# will be moved to
+rename_directory="/media/Music_Library/Music/No Artwork"
+
 #------------------------------------------------------------------
 #   FUNCTIONS
 #------------------------------------------------------------------
@@ -477,7 +481,7 @@ __song_length () {
         ;;
         *)
             # Should NOT ever happen
-            printf "%s\n" "This is a bug!"
+            printf "%s\n" "This is a bug!" >&2
             exit 1
         ;;
     esac
@@ -766,11 +770,121 @@ __tag_directory () {
 	__retag_album
 	__retag_tracks
 
-	# Reset other prompts and start the
-	# current directory over
+	# Reset other prompt values and
+	# start the current directory over
 	unset retag_album
 	unset retag_tracks
 	unset final_prompt
+}
+
+#  RENAME/MOVE MUSIC
+#==============================================
+__rename_music () {
+	# This currently renames music as follows:
+	#
+	#  ARTIST/DATE - ALBUM/TRACKNUMBER - TITLE.flac
+	#
+	#  Example:
+	#  Kamelot/1995 - Eternity/02 - Black Tower.flac
+	#
+	# In order to allow the files to be correctly shown
+	# on other filesystems (like FAT32), special
+	# characters will be converted before being created.
+	# This will NOT affect the METADATA of each FLAC file,
+	# only the resultant filename/directory.  The characters
+	# converted are as follows:
+	#  .  <  >  :  \  /  |  ?  *
+	#
+	# If any of the above characters are found, they will be
+	# replaced with an underscore (eg. _ ).
+
+	# Set up the tags to be used when renaming the FLAC files
+	# in the current directory.  This also entails scrubbing
+	# troublesome characters.  We MUST re-obtain the tag
+	# values to ensure we don't end up with null values	
+	
+	# This obtains ARTIST, DATE, and ALBUM
+	mapfile -n0 -t rename_album_array < \
+	<(metaflac \
+		--show-tag=ARTIST \
+		--show-tag=DATE \
+		--show-tag=ALBUM \
+		"${album_flacs_array[0]}"
+	)
+
+	# ARTIST - Remove special characters
+	ARTIST="${rename_album_array[0]#*=}"
+	ARTIST="${ARTIST/#./_}"
+	ARTIST="${ARTIST//</_}"
+	ARTIST="${ARTIST//>/_}"
+	ARTIST="${ARTIST//:/_}"
+	ARTIST="${ARTIST//\\/_}"
+	ARTIST="${ARTIST//\//_}"
+	ARTIST="${ARTIST//|/_}"
+	ARTIST="${ARTIST//\?/_}"
+	ARTIST="${ARTIST//\*/_}"
+
+	# DATE
+	DATE="${rename_album_array[1]#*=}"
+
+	# ALBUM - Remove special characters
+	ALBUM="${rename_album_array[2]#*=}"
+	ALBUM="${ALBUM/#./_}"
+	ALBUM="${ALBUM//</_}"
+	ALBUM="${ALBUM//>/_}"
+	ALBUM="${ALBUM//:/_}"
+	ALBUM="${ALBUM//\\/_}"
+	ALBUM="${ALBUM//\//_}"
+	ALBUM="${ALBUM//|/_}"
+	ALBUM="${ALBUM//\?/_}"
+	ALBUM="${ALBUM//\*/_}"
+
+	for flac in "${!album_flacs_array[@]}" ; do
+
+		# This obtains TRACKNUMBER and TITLE
+		mapfile -n0 -t rename_track_array < \
+		<(metaflac \
+			--show-tag=TRACKNUMBER \
+			--show-tag=TITLE \
+			"${album_flacs_array[${flac}]}"
+		)
+
+		# TRACKNUMBER
+		TRACKNUMBER="${rename_track_array[0]#*=}"
+
+		# TITLE - Remove special characters
+		TITLE="${rename_track_array[1]#*=}"
+		TITLE="${TITLE/#./_}"
+		TITLE="${TITLE//</_}"
+		TITLE="${TITLE//>/_}"
+		TITLE="${TITLE//:/_}"
+		TITLE="${TITLE//\\/_}"
+		TITLE="${TITLE//\//_}"
+		TITLE="${TITLE//|/_}"
+		TITLE="${TITLE//\?/_}"
+		TITLE="${TITLE//\*/_}"
+
+		# Make sure the directories exist before moving the
+		# renamed files over
+		renamed_file_location="${rename_directory}/${ARTIST}/${DATE} - ${ALBUM}"
+		mkdir -p "${renamed_file_location}"
+
+		# This will move the current FLAC file to the
+		# new location
+		mv "${album_flacs_array[${flac}]}" "${renamed_file_location}/${TRACKNUMBER} - ${TITLE}.flac"
+	done
+
+	# Check if the current directory directory has any leftover files
+	# and move them over if there are
+	empty_directory=( "${flac_directories[${current_directory}]}"/**/*.* )
+
+	if [[ -f "${empty_directory[0]}" ]] ; then
+		# Move any extra files into the new directory
+		mv "${flac_directories[${current_directory}]}"/*.* "${renamed_file_location}/"
+
+		# Delete the current directory (now empty)
+		rmdir "${flac_directories[${current_directory}]}"
+	fi
 }
 
 #  PROMPTS
@@ -878,6 +992,7 @@ __tag_directory_final_prompt () {
 			;;
 		esac
 	done
+
 }
 
 #---END FUNCTIONS--------------------------------------------------
@@ -1058,6 +1173,20 @@ for current_directory in "${!flac_directories[@]}" ; do
 	if [[ "${final_prompt}" == "true" ]] ; then
 		__tag_directory
 	fi
+
+	#------------------------------------------------------------------
+	#   RENAME/MOVE MUSIC
+	#------------------------------------------------------------------
+
+	# Skip a line to allow the bottom red line to be visible
+	printf "\n"
+
+	# This function will rename the tagged music (in the current
+	# directory)
+	__rename_music
+
+	#---END RENAME/MOVE MUSIC------------------------------------------
+
 
 	#---END CURRENT DIRECTORY------------------------------------------
 
