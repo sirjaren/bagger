@@ -839,6 +839,11 @@ __rename_music () {
 	ALBUM="${ALBUM//\?/_}"
 	ALBUM="${ALBUM//\*/_}"
 
+	# Make sure the directories exist before moving the
+	# renamed files over
+	renamed_file_location="${rename_directory}/${ARTIST}/${DATE} - ${ALBUM}"
+	mkdir -p "${renamed_file_location}"
+
 	for flac in "${!album_flacs_array[@]}" ; do
 
 		# This obtains TRACKNUMBER and TITLE
@@ -863,11 +868,6 @@ __rename_music () {
 		TITLE="${TITLE//|/_}"
 		TITLE="${TITLE//\?/_}"
 		TITLE="${TITLE//\*/_}"
-
-		# Make sure the directories exist before moving the
-		# renamed files over
-		renamed_file_location="${rename_directory}/${ARTIST}/${DATE} - ${ALBUM}"
-		mkdir -p "${renamed_file_location}"
 
 		# This will move the current FLAC file to the
 		# new location
