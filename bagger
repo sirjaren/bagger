@@ -160,11 +160,6 @@ __display_album_tags () {
 						;;
 						TRACKTOTAL)
 							TRACKTOTAL="${tag#*=}"
-
-							# This is obtained by the # of FLAC files
-							# in the current directory, so skip grabbing
-							# the current value via FLAC files
-							#TRACKTOTAL_DYNAMIC="${#album_flacs_array[@]}"
 							break
 						;;
 						GENRE)
@@ -233,14 +228,20 @@ __display_album_tags () {
 		# of FLAC files
 		if [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" ]] ; then
 
-			if [[ -n "${TRACKTOTAL}" ]] ; then
+			# If TRACKTOTAL is NOT equal to the # of FLAC files in the
+			# current directory, display the # of FLAC files as well
+			if [[ -n "${TRACKTOTAL}" && "${TRACKTOTAL}" != "${#album_flacs_array[@]}" ]] ; then
 				# Display TRACKTOTAL value and # of FLAC files
 				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
 				"" "TRACKTOTAL:" " ${TRACKTOTAL} " "(${#album_flacs_array[@]} songs found)"
-			else
+			elif [[ -z "${TRACKTOTAL}" ]] ; then
 				# Display '<empty>' and # of FLAC files
 				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
 				"" "TRACKTOTAL:" " " "<empty>" " " "(${#album_flacs_array[@]} songs found)"
+			else
+				# Not empty, and TRACKTOTAL equals # of FLAC files
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
+				"" "TRACKTOTAL:" " ${TRACKTOTAL}"
 			fi
 
 		# If other tag field's values are null, display <empty>, else display current value
@@ -332,8 +333,39 @@ __change_album_tags () {
 		printf "%${spacing}s${CYAN}%s${NORMAL}" \
 		"" "${album_tag_field_array[${tag_field}]}:"
 
-		# Read in the new tag from the user with a prompt
-		read -r -e -i "${!album_tag_field_array[${tag_field}]}" -p " " new_tag
+		# Set up some default tag values for tag fields to be displayed
+		# in the user prompt
+		if [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
+			( -z "${RELEASETYPE}" || \
+			  "${RELEASETYPE}" == [Aa][Ll][Bb][Uu][Mm] ) \
+		   ]] ; then
+			read -r -e -i "Full Length" -p " " new_tag
+
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
+				"${RELEASETYPE}" == [Ss][Ii][Nn][Gg][Ll][Ee]
+			 ]] ; then
+			read -r -e -i "EP" -p " " new_tag
+
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "SOURCE" && -z "${SOURCE}" ]] ; then
+			read -r -e -i "CD" -p " " new_tag
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "MASTERING" && -z "${MASTERING}" ]] ; then
+			read -r -e -i "Lossless" -p " " new_tag
+		else
+			# Set up a local array of the current tag value.  This
+			# value will have the first letter of each word uppercase
+			#
+			# Do not quote the album_tag_array below to allow word splitting
+			local current_tag_value_array=( ${!album_tag_field_array[${tag_field}]} )
+
+			# Change the above array to string (since '-i' in read doesn't handle
+			# arrays well) as well as capitalize the first letter of each word
+			local current_tag_value="${current_tag_value_array[@]^}"
+
+			# Read in the new tag from the user with a prompt.  The text
+			# displayed to the user enforces the first letter of each word
+			# to be displayed uppercase
+			read -r -e -i "${current_tag_value}" -p " " new_tag
+		fi
 
 		__place_cursor "${current_line}" "${arrow_spacing}"
 
@@ -525,7 +557,7 @@ __song_length () {
 # the song length of each FLAC file
 __list_tracks () {
 	for flac in "${!album_flacs_array[@]}" ; do
-		printf "\r\033[K%s${BLUE}%s${NORMAL}%s\n" \
+		printf "\r\033[K%s${CYAN}%s${NORMAL}%s\n" \
 		"    " "$(__song_length)" " ${album_flacs_array[${flac}]##*/}"
 	done
 }
@@ -548,24 +580,38 @@ __change_track_tags () {
 		TITLE="$(metaflac --show-tag=TITLE "${album_flacs_array[${flac}]}")"
 		TITLE="${TITLE#*=}"
 
+		# Set up a local array of the current tag value for TITLE.  This
+		# value will have the first letter of each word uppercase
+		#
+		# Do NOT quote ${TITLE} value below to allow word splitting
+		local current_title_value_array=( ${TITLE} )
+
+		# Change the above array to string (since '-i' in read doesn't handle
+		# arrays well) as well as capitalize the first letter of each word
+		local current_title_value="${current_title_value_array[@]^}"
+
+		# Display prompt field
 		printf "\r\033[K%s${CYAN}%s${NORMAL}" \
 		" " "TRACKNUMBER / TITLE:"
 
-		# Read in new tracknumber and title tag via prompt
+		# Read in new tracknumber and title tag via prompt.  The TITLE
+		# value displayed to the user enforces the first letter of each
+		# word to be displayed uppercase
 		#
 		# If TRACKNUMBER and TITLE are both empty, don't display
 		# either tag (prevents space between two tags from appearing)
 		if [[ -z "${TRACKNUMBER}" && -z "${TITLE}" ]] ; then
 			read -r -e -a tracknumber_title_array -p " "
 
-		# If TRACKNUMBER is empty, just display TITLE tag
+		# If TRACKNUMBER is empty, just display TITLE tag via
+		# current_title_value
 		elif [[ -z "${TRACKNUMBER}" ]] ; then
-			read -r -e -a tracknumber_title_array -i "${TITLE}" -p " "
+			read -r -e -a tracknumber_title_array -i "${current_title_value}" -p " "
 
 		# Display both tags.  If TITLE is empty, the spacing will still
 		# be correct (eg. '01 ' < space after track number)
 		else
-			read -r -e -a tracknumber_title_array -i "${TRACKNUMBER} ${TITLE}" -p " "
+			read -r -e -a tracknumber_title_array -i "${TRACKNUMBER} ${current_title_value}" -p " "
 		fi
 
 		# Check to make sure tracknumber tag is a valid
@@ -596,22 +642,22 @@ __change_track_tags () {
 
 		# If both the new tags are NOT empty
 		if [[ -n "${new_tracknumber}" && -n "${new_title}" ]] ; then
-			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
 			"  " "*" " " "${LENGTH}" " [ " "${new_tracknumber}" " ] " "${new_title}"
 
 		# If the new tracknumber tag is empty
 		elif [[ -z "${new_tracknumber}" && -n "${new_title}" ]] ; then
-			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
 			"  " "*" " " "${LENGTH}" " [ " "??" " ] " "${new_title}"
 
 		# If the new title tag is empty
 		elif [[ -n "${new_tracknumber}" && -z "${new_title}" ]] ; then
-			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
 			"  " "*" " " "${LENGTH}" " [ " "${new_tracknumber}" " ] " "<empty>"
 
 		# If both tags are empty
 		else
-			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${BLUE}%s${NORMAL}%s${RED}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+			printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
 			"  " "*" " " "${LENGTH}" " [ " "??" " ] " "<empty>"
 		fi
 
@@ -731,6 +777,29 @@ __retag_album () {
 				--set-tag=MASTERING="${new_mastering}" \
 				"${album_flacs_array[@]}"
 	fi
+
+	# Unset all the album tag values
+	# Original tag values
+	unset ARTIST
+	unset ALBUM
+	unset DISCNUMBER
+	unset DATE
+	unset TRACKTOTAL
+	unset GENRE
+	unset RELEASETYPE
+	unset SOURCE
+	unset MASTERING
+
+	# New tag values
+	unset new_artist
+	unset new_album
+	unset new_discnumber
+	unset new_date
+	unset new_tracktotal
+	unset new_genre
+	unset new_releasetype
+	unset new_source
+	unset new_mastering
 }
 
 __retag_tracks () {
@@ -762,6 +831,14 @@ __retag_tracks () {
 		fi
 
 	done
+
+	# Unset all the track tag values
+	unset TRACKNUMBER
+	unset TITLE
+	unset tracknumber_tag
+	unset title_tag
+	unset new_tracknumber_array
+	unset new_title_array
 }
 
 __tag_directory () {
