@@ -71,19 +71,31 @@ __clear_line () {
 __top_banner () {
 	printf "${GREEN}%52s\r%s${CYAN}%s${NORMAL}\n" \
 	"${flac_directories[${current_directory}]##*/}" " " "[$(( ${current_directory} + 1 ))/${number_of_directories}]"
-
-	# Separator line
-	printf "%s${BLUE}%s${NORMAL}\n" \
-	" " "───────┬────────────────┬──────────────────────────"
 }
 
 
 __album_banner () {
+	# Separator line
+	printf "%s${BLUE}%s${NORMAL}\n" \
+	" " "───────┬────────────────┬──────────────────────────"
+
 	printf "%8s${BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BLUE}%s${NORMAL}\n" \
 	"" "│" " " "Album Metadata" " " "│"
 
 	printf "%8s${BLUE}%s${NORMAL}\n" \
 	"" "└────────────────┘"
+}
+
+__multi_banner () {
+	# Separator line
+	printf "%s${BLUE}%s${NORMAL}\n" \
+	" " "───────┬────────────────────────┬──────────────────────────"
+
+	printf "%8s${BLUE}%s${NORMAL}%s${YELLOW}%s${NORMAL}%s${BLUE}%s${NORMAL}\n" \
+	"" "│" " " "Multiple Disc Metadata" " " "│"
+
+	printf "%8s${BLUE}%s${NORMAL}\n" \
+	"" "└────────────────────────┘"
 }
 
 __track_banner () {
@@ -107,6 +119,8 @@ __display_album_tags () {
 	# tags that will be changed album-wise (batch tag).
 	mapfile -n0 -t metaflac_tag_array < \
 	<(metaflac \
+		--show-bps \
+		--show-sample-rate \
 		--show-tag=ARTIST \
 		--show-tag=ALBUM \
 		--show-tag=DISCNUMBER \
@@ -152,7 +166,14 @@ __display_album_tags () {
 						;;
 						DISCNUMBER)
 							DISCNUMBER="${tag#*=}"
-							break
+							# ${previous_discnumber_value} is used to determine if there are
+							# multiple values of DISCNUMBER in one directory, indicating
+							# a possible multi-disc album
+							if [[ "${DISCNUMBER}" != "${previous_discnumber_value}" && -n "${previous_discnumber_value}" ]] ; then
+								DISCNUMBER="<multiple discs>"
+								break
+							fi
+							previous_discnumber_value="${DISCNUMBER}"
 						;;
 						DATE)
 							DATE="${tag#*=}"
@@ -177,6 +198,11 @@ __display_album_tags () {
 						MASTERING)
 							MASTERING="${tag#*=}"
 							break
+						;;
+						*)
+							# The 'bps' and 'sample-rate' would
+							# appear here, so do nothing
+							:
 						;;
 					esac
 
@@ -223,21 +249,130 @@ __display_album_tags () {
 			;;
 		esac
 
+		# If the current tag field is ALBUM, check if the bits per sample and
+		# sample rate are higher than CD quality (greater than 16bit/44.1kHz).
+		# If so, display the album field with a yellow prompt showing the values
+		# of the bps as well as sample rate (indicating a vinyl or digital release).
+		if [[ "${album_tag_field_array[${tag_field}]}" == "ALBUM" ]] ; then
+
+			# These two values are ALWAYS going to be the
+			# first to array indices. Make sure to remove the
+			# filename before saving the values
+			bits_per_sample="${metaflac_tag_array[0]##*:}"
+			sample_rate="${metaflac_tag_array[1]##*:}"
+
+			if [[ "${bits_per_sample}" -gt 16 || "${sample_rate}" -gt 44100 ]] ; then
+				# Change sample rate value from Hz to kHz
+				case "${sample_rate}" in
+					8000)
+						sample_rate="8"
+					;;
+					11025)
+						sample_rate="11.025"
+					;;
+					12000)
+						sample_rate="12"
+					;;
+					16000)
+						sample_rate="16"
+					;;
+					18900)
+						sample_rate="18.9"
+					;;
+					22050)
+						sample_rate="22.05"
+					;;
+					24000)
+						sample_rate="24"
+					;;
+					28000)
+						sample_rate="28"
+					;;
+					32000)
+						sample_rate="32"
+					;;
+					37800)
+						sample_rate="37.8"
+					;;
+					44100)
+						sample_rate="44.1"
+					;;
+					48000)
+						sample_rate="48"
+					;;
+					56000)
+						sample_rate="56"
+					;;
+					64000)
+						sample_rate="64"
+					;;
+					88200)
+						sample_rate="88.2"
+					;;
+					96000)
+						sample_rate="96"
+					;;
+					112000)
+						sample_rate="112"
+					;;
+					128000)
+						sample_rate="128"
+					;;
+					144000)
+						sample_rate="144"
+					;;
+					176400)
+						sample_rate="176.4"
+					;;
+					192000)
+						sample_rate="192"
+					;;
+				esac
+
+				# Display ALBUM value with yellow values of bps and sample rate
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}%s${RED}%s${YELLOW}%s${RED}%s${NORMAL}\n" \
+				"" "ALBUM:" " " "${ALBUM}" "  " "*" "${bits_per_sample}bit/${sample_rate}kHz" "*"
+			else
+				# Display normal ALBUM: with ALBUM value
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
+				"" "ALBUM:" " ${ALBUM}"
+			fi
+
+		# If the current tag field is DISCNUMBER, display whether there are
+		# multiple flacs containing different values for DISCNUMBER (indicating
+		# a multi-disc release).  If all the same, either display <empty>
+		# or the tag value
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "DISCNUMBER" ]] ; then
+
+			if [[ -z "${DISCNUMBER}" ]] ; then
+				# Display '<empty>'
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" \
+				"" "DISCNUMBER:" " " "<empty>"
+			elif [[ "${DISCNUMBER}" == "<multiple discs>" ]] ; then
+				# Display '<multiple discs>'
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+				"" "DISCNUMBER:" " " "<multiple discs>"
+			else
+				# Not empty, display DISCNUMBER value
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${NORMAL}%s${NORMAL}\n" \
+				"" "DISCNUMBER:" " " "${DISCNUMBER}"
+			fi
+
 		# If the current tag field is TRACKTOTAL, display the value obtained
 		# from the FLAC file as well as the value determined from the number
 		# of FLAC files
-		if [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" ]] ; then
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" ]] ; then
 
 			# If TRACKTOTAL is NOT equal to the # of FLAC files in the
 			# current directory, display the # of FLAC files as well
 			if [[ -n "${TRACKTOTAL}" && "${TRACKTOTAL}" != "${#album_flacs_array[@]}" ]] ; then
 				# Display TRACKTOTAL value and # of FLAC files
-				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
-				"" "TRACKTOTAL:" " ${TRACKTOTAL} " "(${#album_flacs_array[@]} songs found)"
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${RED}%s${YELLOW}%s${RED}%s${NORMAL}\n" \
+				"" "TRACKTOTAL:" " ${TRACKTOTAL}  " "*" "${#album_flacs_array[@]} songs found" "*"
 			elif [[ -z "${TRACKTOTAL}" ]] ; then
 				# Display '<empty>' and # of FLAC files
-				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
-				"" "TRACKTOTAL:" " " "<empty>" " " "(${#album_flacs_array[@]} songs found)"
+				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}%s${RED}%s${YELLOW}%s${RED}%s${NORMAL}\n" \
+				"" "TRACKTOTAL:" " " "<empty>" "  " "*" "${#album_flacs_array[@]} songs found" "*"
 			else
 				# Not empty, and TRACKTOTAL equals # of FLAC files
 				printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
@@ -335,17 +470,28 @@ __change_album_tags () {
 
 		# Set up some default tag values for tag fields to be displayed
 		# in the user prompt
-		if [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
+		if [[ "${album_tag_field_array[${tag_field}]}" == "DISCNUMBER" && \
+			  "${DISCNUMBER}" == "<multiple discs>" \
+		   ]] ; then
+			read -r -e -i "multiple" -p " " new_tag
+
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" && -z "${TRACKTOTAL}" ]] ; then
+			read -r -e -i "${#album_flacs_array[@]}" -p " " new_tag
+
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
 			( -z "${RELEASETYPE}" || \
 			  "${RELEASETYPE}" == [Aa][Ll][Bb][Uu][Mm] ) \
 		   ]] ; then
 			read -r -e -i "Full Length" -p " " new_tag
 
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
-				"${RELEASETYPE}" == [Ss][Ii][Nn][Gg][Ll][Ee]
+			  ( "${RELEASETYPE}" == [Ss][Ii][Nn][Gg][Ll][Ee] || \
+				"${RELEASETYPE}" == [Ee][Pp] ) \
 			 ]] ; then
 			read -r -e -i "EP" -p " " new_tag
 
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "DATE" && -n "${DATE}" ]] ; then
+			read -r -e -i "${DATE:0:4}" -p " " new_tag
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "SOURCE" && -z "${SOURCE}" ]] ; then
 			read -r -e -i "CD" -p " " new_tag
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "MASTERING" && -z "${MASTERING}" ]] ; then
@@ -369,74 +515,123 @@ __change_album_tags () {
 
 		__place_cursor "${current_line}" "${arrow_spacing}"
 
-		# If the old tag is different from the new one
-		if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
+		# If the user specified 'm', 'multi', or 'multiple' under the DISCNUMBER, go in to
+		# multi disc mode
+		if [[ "${album_tag_field_array[${tag_field}]}" == "DISCNUMBER" ]] ; then
+			case "${new_tag}" in
+				[Mm] | [Mm][Uu][Ll][Tt][Ii] | [Mm][Uu][Ll][Tt][Ii][Pp][Ll][Ee])
+					# Choose which tracks are for which disc number
+					__multi_disc
+				;;
+				*)
+					# If the old tag is different from the new one
+					if [[ "${DISCNUMBER}" != "${new_tag}" ]] ; then
 
-			# If the old tag is empty
-			if [[ -z "${!album_tag_field_array[${tag_field}]}" ]] ; then
-				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
-				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${new_tag}" " <- " "<empty>"
+						# If the old tag is empty
+						if [[ -z "${DISCNUMBER}" ]] ; then
+							printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+							" " "*" " " "DISCNUMBER:" " " "${new_tag}" " <- " "<empty>"
 
-			# If the new tag is empty
+						# If the new tag is empty
+						elif [[ -z "${new_tag}" ]] ; then
+							printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+							" " "*" " " "DISCNUMBER:" " " "<empty>"
+
+						# Display the old tag and the new tag differences
+						else
+							printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+							" " "*" " " "DISCNUMBER:" " " "${new_tag}" " <- " "${DISCNUMBER}"
+						fi
+
+					# If the old and new tag are the same and the new
+					# tag is empty
+					elif [[ -z "${new_tag}" ]] ; then
+						printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+						" " "*" " " "DISCNUMBER:" " " "<empty>"
+
+					# No difference from old tag to new tag, change the tag color
+					# to green
+					else
+						printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}" \
+						" " "*" " " "DISCNUMBER:" " " "${DISCNUMBER}"
+					fi
+					
+					# Set the ${new_discnumber} to ${new_tag}
+					new_discnumber="${new_tag}"
+				;;
+			esac
+		else
+			# If the old tag is different from the new one
+			if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
+
+				# If the old tag is empty
+				if [[ -z "${!album_tag_field_array[${tag_field}]}" ]] ; then
+					printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+					" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${new_tag}" " <- " "<empty>"
+
+				# If the new tag is empty
+				elif [[ -z "${new_tag}" ]] ; then
+					printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+					" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "<empty>"
+
+				# Display the old tag and the new tag differences
+				else
+					printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+					" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${new_tag}" " <- " "${!album_tag_field_array[${tag_field}]}"
+				fi
+
+			# If the old and new tag are the same and the new
+			# tag is empty
 			elif [[ -z "${new_tag}" ]] ; then
 				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
 				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "<empty>"
 
-			# Display the old tag and the new tag differences
+			# No difference from old tag to new tag, change the tag color
+			# to green
 			else
-				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
-				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${new_tag}" " <- " "${!album_tag_field_array[${tag_field}]}"
+				printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}" \
+				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${!album_tag_field_array[${tag_field}]}"
 			fi
 
-		# If the old and new tag are the same and the new
-		# tag is empty
-		elif [[ -z "${new_tag}" ]] ; then
-			printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
-			" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "<empty>"
+			# If the value of the new tag is different from the old tag, save the
+			# new metadata, else skip it (this allows us to NOT retag files unnecessarily)
+			if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
 
-		# No difference from old tag to new tag, change the tag color
-		# to green
-		else
-			printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}" \
-			" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${!album_tag_field_array[${tag_field}]}"
-		fi
+				# Save the new tag value to be used when tagging
+				# the files
+				case "${album_tag_field_array[${tag_field}]}" in
+					ARTIST)
+						new_artist="${new_tag}"
+					;;
+					ALBUM)
+						new_album="${new_tag}"
+					;;
+					DISCNUMBER)
+						# This will be set in the above iteration, so
+						# no need to set it here
+						:
+					;;
+					DATE)
+						new_date="${new_tag}"
+					;;
+					TRACKTOTAL)
+						new_tracktotal="${new_tag}"
+					;;
+					GENRE)
+						new_genre="${new_tag}"
+					;;
+					RELEASETYPE)
+						new_releasetype="${new_tag}"
+					;;
+					SOURCE)
+						new_source="${new_tag}"
+					;;
+					MASTERING)
+						new_mastering="${new_tag}"
+					;;
+				esac
 
-		# If the value of the new tag is different from the old tag, save the
-		# new metadata, else skip it (this allows us to NOT retag files unnecessarily)
-		if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
-
-			# Save the new tag value to be used when tagging
-			# the files
-			case "${album_tag_field_array[${tag_field}]}" in
-				ARTIST)
-					new_artist="${new_tag}"
-				;;
-				ALBUM)
-					new_album="${new_tag}"
-				;;
-				DISCNUMBER)
-					new_discnumber="${new_tag}"
-				;;
-				DATE)
-					new_date="${new_tag}"
-				;;
-				TRACKTOTAL)
-					new_tracktotal="${new_tag}"
-				;;
-				GENRE)
-					new_genre="${new_tag}"
-				;;
-				RELEASETYPE)
-					new_releasetype="${new_tag}"
-				;;
-				SOURCE)
-					new_source="${new_tag}"
-				;;
-				MASTERING)
-					new_mastering="${new_tag}"
-				;;
-			esac
-
+			fi
 		fi
 
 		__place_cursor "${total_lines}" 0
@@ -446,111 +641,393 @@ __change_album_tags () {
 	done
 }
 
+# Display track listing with a prompt to set the DISCNUMBER for each
+# track individually for multi-disc albums/releases
+__multi_disc () {
+	# Until user chooses "yes" at the prompt to save
+	# multi disc information, don't move on
+	until [[ "${multi_prompt}" == "true" ]] ; do
+
+		# Clear the screen
+		__clear_screen
+
+		# Display current directory
+		__top_banner
+
+		# Show multi disc banner
+		__multi_banner
+
+		# Total lines used so far in the header/banner, including
+		# the start of the first tag field
+		total_lines="$(( ${#album_flacs_array[@]} + 6 ))"
+
+		# Current line to the first file
+		current_line="5"
+
+		# Display a listing of FLAC files with the current DISCNUMBER tag
+		for flac in "${!album_flacs_array[@]}" ; do
+			tmp_discnumber="$(metaflac --show-tag=DISCNUMBER "${album_flacs_array[${flac}]}")"
+			tmp_discnumber="${tmp_discnumber##*=}"
+
+			if [[ -n "${tmp_discnumber}" ]] ; then
+				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s\n" \
+				"    " "$(__song_length)" " [ " "${tmp_discnumber}" " ] ${album_flacs_array[${flac}]##*/}"
+			else
+				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s\n" \
+				"    " "$(__song_length)" " [ " "?" " ] ${album_flacs_array[${flac}]##*/}"
+			fi
+		done
+
+		# Separator line
+		printf "%s${BLUE}%s${NORMAL}\n" \
+		" " "───────────────────────────────────────────────────"
+
+		# Displays the current FLAC file to edit with the user prompt
+		# asking for the new DISCNUMBER tag
+		for flac in "${!album_flacs_array[@]}" ; do
+			# Place cursor to current tag
+			__place_cursor "${current_line}" 2
+			printf "${GREEN}%s${NORMAL}" "->"
+			__place_cursor "${total_lines}" 0
+
+			# Display DISCNUMBER prompt field
+			printf "\r\033[K%s${CYAN}%s${NORMAL}" \
+			" " "DISCNUMBER:"
+
+			# Prompt for new DISCNUMBER tag
+			read -r -e -p " " new_discnumber
+
+			# Store the value of ${new_discnumber}, along with the song length
+			# and the filename, using :::: as the delimeter:
+			#
+			#  <song length>::::<discnumber>::::<filename>
+			#
+			if [[ -n "${new_discnumber}" ]] ; then
+				multi_discnumber_array+=(
+					"$(__song_length)::::${album_flacs_array[${flac}]##*/}::::${new_discnumber}"
+				)
+			else
+			# The user put nothing for the DISCNUMBER tag value, turn the value
+			# from null to zero to allow looping over indices correctly (instead of
+			# having to deal with null values, we just use 0)
+				multi_discnumber_array+=(
+					"$(__song_length)::::${album_flacs_array[${flac}]##*/}::::0"
+				)
+			fi
+
+			__place_cursor "${current_line}" 0
+			if [[ -z "${new_discnumber}" ]] ; then
+				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+				"  " "*" " " "$(__song_length)" " [ " "?" " ] " "${album_flacs_array[${flac}]##*/}"
+			else
+				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+				"  " "*" " " "$(__song_length)" " [ " "${new_discnumber}" " ] " "${album_flacs_array[${flac}]##*/}"
+			fi
+
+			((current_line++))
+		done
+
+		# Store a copy of the multi_discnumer_array for use when
+		# tagging the files, because the multi_discnumber_array will
+		# be empty by the time the script begins to tag the files.  This
+		# also converts any DISCNUMBER value of 0 to null (empty) to ensure
+		# proper tagging
+		for i in "${multi_discnumber_array[@]}" ; do
+			if [[ "${i##*::::}" -eq 0 ]] ; then
+				multi_discnumber_change_array+=( "${i%::::*}::::" )
+			else
+				multi_discnumber_change_array+=( "${i}" )
+			fi
+		done
+
+		########################################################
+		# Sort the new DISCNUMBER tag values with the filenames
+		# to allow easy readability
+		########################################################
+
+		# Clear the screen
+		__clear_screen
+
+		# Display current directory
+		__top_banner
+
+		# Show multi disc banner
+		__multi_banner
+
+		# Sort and display the new filenames with the new
+		# DISCNUMBER tag
+		#
+		# Set the disc index to loop over.  This index is the value
+		# tested against the value of each ${new_discnumber}.
+		disc_index=0
+
+		# Keep going until ${multi_discnumber_array[@]} is empty.  The inner for loop
+		# will find a match for each value, unsetting an index for each match
+		# eventually emptying the entire array
+		while [[ -n "${multi_discnumber_array[@]}" ]] ; do
+
+			# Every time the value of ${disc_index} is matched against ${sort_discnumber}
+			# (starting from 0), print out the formatted filename.  For each match, remove
+			# the array holding the file matched.
+			for flac in "${!multi_discnumber_array[@]}" ; do
+
+				# Specific values obtained from each indexed value
+				sort_filename="${multi_discnumber_array[${flac}]#*::::}"
+				sort_filename="${sort_filename%::::*}"
+				sort_discnumber="${multi_discnumber_array[${flac}]##*::::}"
+				sort_length="${multi_discnumber_array[${flac}]%%::*}"
+
+				# The user didn't enter a value for DISCNUMBER or the value was 0
+				if [[ "${sort_discnumber}" -eq "${disc_index}" && "${sort_discnumber}" -eq 0 ]] ; then
+					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+					"  " "*" " " "${sort_length}" " [ " "?" " ] " "${sort_filename}"
+					unset -v multi_discnumber_array[${flac}]
+
+				elif [[ "${sort_discnumber}" -eq "${disc_index}" ]] ; then
+					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+					"  " "*" " " "${sort_length}" " [ " "${sort_discnumber}" " ] " "${sort_filename}"
+					unset -v multi_discnumber_array[${flac}]
+				fi
+
+			done
+
+			# Each time the loop finishes above, add one to the disc_index,
+			# effectively sorting the ${new_discnumber} values with each filename
+			((disc_index++))
+
+		done
+
+		# Separator line
+		printf "%s${BLUE}%s${NORMAL}\n" \
+		" " "───────────────────────────────────────────────────"
+
+		__multi_disc_prompt
+
+	done
+
+	if [[ "${multi_prompt}" == "true" ]]  ; then
+		# Reset ${current_line} to previous value
+		#current_line="${current_line_backup}"
+		current_line="5"
+
+		# Reset ${total_lines} to previous value
+		#total_lines="${total_lines_backup}"
+		total_lines="16"
+
+		# Clear the screen
+		__clear_screen
+
+		# Display current directory
+		__top_banner
+
+		# Show album banner
+		__album_banner
+
+		__display_album_tags
+
+		# Separator line
+		printf "%s${BLUE}%s${NORMAL}\n" \
+		" " "───────────────────────────────────────────────────"
+
+		__place_cursor "${current_line}" 0
+
+		# Show the ARTIST, ALBUM, and DATE tag values (as well
+		# as what has been changed), before returning to
+		# the next album tag (DISCNUMBER)
+		#
+		# ARTIST
+		if [[ "${ARTIST}" != "${new_artist}" && "${ARTIST}" == "dont tag" ]] ; then
+
+			# If the old tag is empty
+			if [[ -z "${ARTIST}" ]] ; then
+				printf "\r\033[K%7s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+				" " "*" " " "ARTIST:" " " "${new_artist}" " <- " "<empty>"
+
+			# If the new tag is empty
+			elif [[ -z "${new_artist}" ]] ; then
+				printf "\r\033[K%7s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+				" " "*" " " "ARTIST:" " " "<empty>"
+
+			# Display the old tag and the new tag differences
+			else
+				printf "\r\033[K%7s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+				" " "*" " " "ARTIST:" " " "${new_artist}" " <- " "${ARTIST}"
+			fi
+
+		else
+			# The old and new tag are the same
+			printf "\r\033[K%7s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+			" " "*" " " "ARTIST:" " " "${ARTIST}"
+		fi
+
+		# ALBUM
+		if [[ "${ALBUM}" != "${new_album}" && "${ALBUM}" == "dont tag" ]] ; then
+
+			# If the old tag is empty
+			if [[ -z "${ALBUM}" ]] ; then
+				printf "\r\033[K%8s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+				" " "*" " " "ALBUM:" " " "${new_album}" " <- " "<empty>"
+
+			# If the new tag is empty
+			elif [[ -z "${new_album}" ]] ; then
+				printf "\r\033[K%8s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+				" " "*" " " "ALBUM:" " " "<empty>"
+
+			# Display the old tag and the new tag differences
+			else
+				printf "\r\033[K%8s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+				" " "*" " " "ALBUM:" " " "${new_album}" " <- " "${ALBUM}"
+			fi
+
+		else
+			# The old and new tag are the same
+			printf "\r\033[K%8s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+			" " "*" " " "ALBUM:" " " "${ALBUM}"
+		fi
+
+		# DISCNUMBER
+		#
+		# This tests for each DISCNUMBER value set for each FLAC file, and if
+		# every file has a null value, then print empty, else show that there
+		# are multiple discs
+		for i in "${multi_discnumber_change_array[@]##*::::}" ; do
+			if [[ -n "${i}" ]] ; then
+				multiple="true"
+				break
+			fi
+		done
+
+		if [[ "${multiple}" == "true" ]] ; then
+			printf "\r\033[K%3s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+			" " "*" " " "DISCNUMBER:" " " "<multiple discs>"
+		else
+			printf "\r\033[K%3s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}\n" \
+			" " "*" " " "DISCNUMBER:" " " "<empty>"
+		fi
+
+		# Reset the total lines back to 15 (includes the banner
+		# album metadata and separator lines)
+		total_lines="15"
+
+		# Set the current line back to where it was before
+		# the multi_disc function started ( +1 )
+		current_line="$(( ${current_line} + 2 ))"
+
+	fi
+}
+
 #  TRACK MANIPULATION
 #==============================================
 # Obtain the song length of the current FLAC file
 __song_length () {
 	# Obtain the total number of samples in current file
-    total_samples="$(metaflac --show-total-samples "${album_flacs_array[${flac}]}")"
+	total_samples="$(metaflac --show-total-samples "${album_flacs_array[${flac}]}")"
 
-    # Obtain the sample rate in current file
-    sample_rate="$(metaflac --show-sample-rate "${album_flacs_array[${flac}]}")"
+	# Obtain the sample rate in current file
+	sample_rate="$(metaflac --show-sample-rate "${album_flacs_array[${flac}]}")"
 
-    # This the total number of time in minutes (with the decimal [seconds]
-    # moved to the right 3 places to account for non integer division
-    total_time_in_minutes_with_decimal_moved="$(( ${total_samples} * 1000 / ${sample_rate} / 60 ))"
+	# This the total number of time in minutes (with the decimal [seconds]
+	# moved to the right 3 places to account for non integer division
+	total_time_in_minutes_with_decimal_moved="$(( ${total_samples} * 1000 / ${sample_rate} / 60 ))"
 
-    # This is the total number of minutes (moves the decimal
-    # back to the left 3 places and culls the 'decimal')
-    total_minutes="$(( ${total_time_in_minutes_with_decimal_moved} / 1000 ))"
+	# This is the total number of minutes (moves the decimal
+	# back to the left 3 places and culls the 'decimal')
+	total_minutes="$(( ${total_time_in_minutes_with_decimal_moved} / 1000 ))"
 
-    # If the song is really short (less than a minute, do not offset the
-    # string when obtaining just the remaining song time
-    #
-    # This is essentiall a percentage decimal (eg .832) but with the
-    # decimal moved 3 places to the right
-    if [[ "${total_minutes}" -eq 0 ]] ; then
-        remaining_time_decimal_percentage="${total_time_in_minutes_with_decimal_moved}"
-    else
-        remaining_time_decimal_percentage="${total_time_in_minutes_with_decimal_moved:${#total_minutes}}"
-    fi
+	# If the song is really short (less than a minute, do not offset the
+	# string when obtaining just the remaining song time
+	#
+	# This is essentiall a percentage decimal (eg .832) but with the
+	# decimal moved 3 places to the right
+	if [[ "${total_minutes}" -eq 0 ]] ; then
+		remaining_time_decimal_percentage="${total_time_in_minutes_with_decimal_moved}"
+	else
+		remaining_time_decimal_percentage="${total_time_in_minutes_with_decimal_moved:${#total_minutes}}"
+	fi
 
-    # Remove any leading zeroes from the remaining time so BASH can
-    # successfully multiply the time without thinking the number is
-    # an octal number
-    #
-    # (eg. 078 -> 78 or 008 -> 08)
-    remaining_time_decimal_percentage="${remaining_time_decimal_percentage#0}"
-    # (eg. 08 -> 8)
-    remaining_time_decimal_percentage="${remaining_time_decimal_percentage#0}"
+	# Remove any leading zeroes from the remaining time so BASH can
+	# successfully multiply the time without thinking the number is
+	# an octal number
+	#
+	# (eg. 078 -> 78 or 008 -> 08)
+	remaining_time_decimal_percentage="${remaining_time_decimal_percentage#0}"
+	# (eg. 08 -> 8)
+	remaining_time_decimal_percentage="${remaining_time_decimal_percentage#0}"
 
-    # This is the remaining time 'percentage' multiplied by 60 to obtain the
-    # total seconds (again, the decimal is moved 3 places to the right)
-    remaining_seconds_unformatted="$(( ${remaining_time_decimal_percentage} * 60 ))"
+	# This is the remaining time 'percentage' multiplied by 60 to obtain the
+	# total seconds (again, the decimal is moved 3 places to the right)
+	remaining_seconds_unformatted="$(( ${remaining_time_decimal_percentage} * 60 ))"
 
-    # Check the string length of the remaining seconds and prepend
-    # the necessary amount of zeroes to ensure we always end
-    # up with exactly five (5) characters (for consistency)
-    case "${#remaining_seconds_unformatted}" in
-        5)
-            # Do nothing
-            :
-        ;;
-        4)
-            remaining_seconds_unformatted="0${remaining_seconds_unformatted}"
-        ;;
-        3)
-            remaining_seconds_unformatted="00${remaining_seconds_unformatted}"
-        ;;
-        2)
-            remaining_seconds_unformatted="000${remaining_seconds_unformatted}"
-        ;;
-        1)
-            remaining_seconds_unformatted="0000${remaining_seconds_unformatted}"
-        ;;
-        0)
-            remaining_seconds_unformatted="00000${remaining_seconds_unformatted}"
-        ;;
-        *)
-            # Should NOT ever happen
-            printf "%s\n" "This is a bug!" >&2
-            exit 1
-        ;;
-    esac
+	# Check the string length of the remaining seconds and prepend
+	# the necessary amount of zeroes to ensure we always end
+	# up with exactly five (5) characters (for consistency)
+	case "${#remaining_seconds_unformatted}" in
+		5)
+			# Do nothing
+			:
+		;;
+		4)
+			remaining_seconds_unformatted="0${remaining_seconds_unformatted}"
+		;;
+		3)
+			remaining_seconds_unformatted="00${remaining_seconds_unformatted}"
+		;;
+		2)
+			remaining_seconds_unformatted="000${remaining_seconds_unformatted}"
+		;;
+		1)
+			remaining_seconds_unformatted="0000${remaining_seconds_unformatted}"
+		;;
+		0)
+			remaining_seconds_unformatted="00000${remaining_seconds_unformatted}"
+		;;
+		*)
+			# Should NOT ever happen
+			printf "%s\n" "This is a bug!" >&2
+			exit 1
+		;;
+	esac
 
-    # This is the total number of seconds obtained from the
-    # above string: ${remaining_seconds_unformatted}, with the
-    # extra 'decimal places' removed
-    total_seconds="${remaining_seconds_unformatted:0:2}"
+	# This is the total number of seconds obtained from the
+	# above string: ${remaining_seconds_unformatted}, with the
+	# extra 'decimal places' removed
+	total_seconds="${remaining_seconds_unformatted:0:2}"
 
-    # This is the value right after the remaining seconds last
-    # digit, essentially a decimal number.  This will be
-    # used to round up or down.
-    round_up_value="${remaining_seconds_unformatted:2:1}"
+	# This is the value right after the remaining seconds last
+	# digit, essentially a decimal number.  This will be
+	# used to round up or down.
+	round_up_value="${remaining_seconds_unformatted:2:1}"
 
-    # If ${round_up_value} is greater or equal to five (5),
-    # round up by adding one to the total seconds
-    if [[ "${round_up_value}" -ge 5 ]] ; then
-        total_seconds="${total_seconds#0}"
-        ((total_seconds++))
-    fi
+	# If ${round_up_value} is greater or equal to five (5),
+	# round up by adding one to the total seconds
+	if [[ "${round_up_value}" -ge 5 ]] ; then
+		total_seconds="${total_seconds#0}"
+		((total_seconds++))
+	fi
 
-    # If the total seconds is only one digit (eg. 0-9), then
-    # prepend a zero in front to allow consistent spacing
-    if [[ "${#total_seconds}" -eq 1 ]] ; then
-        total_seconds="0${total_seconds}"
-    fi
+	# If the total seconds is only one digit (eg. 0-9), then
+	# prepend a zero in front to allow consistent spacing
+	if [[ "${#total_seconds}" -eq 1 ]] ; then
+		total_seconds="0${total_seconds}"
+	fi
 
-    # If the total seconds is 60 (as a result of rounding up),
-    # then set the total seconds to '00' (for formatting) and add
-    # one to the total minutes
-    if [[ "${total_seconds}" == "60" ]] ; then
-        total_seconds=00
-        ((total_minutes++))
-    fi
+	# If the total seconds is 60 (as a result of rounding up),
+	# then set the total seconds to '00' (for formatting) and add
+	# one to the total minutes
+	if [[ "${total_seconds}" == "60" ]] ; then
+		total_seconds=00
+		((total_minutes++))
+	fi
 
-    # This will print the resultant song length
-    printf "%s" "${total_minutes}:${total_seconds}"
+	# If ${total_minutes} is only one digit, prepend a space for consistent
+	# formatting (allows songs 10 minutes or over to display in line with
+	# shorter songs).
+	if [[ "${#total_minutes}" -eq 1 ]] ; then
+		total_minutes=" ${total_minutes}"
+	fi
+
+	# This will print the resultant song length
+	printf "%s" "${total_minutes}:${total_seconds}"
 }
 
 # List the FLAC files in the current directory with
@@ -724,10 +1201,21 @@ __retag_album () {
 
 	# Set new DISCNUMBER tag
 	if [[ "${new_discnumber}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=DISCNUMBER \
-				--set-tag=DISCNUMBER="${new_discnumber}" \
-				"${album_flacs_array[@]}"
+
+		if [[ "${multi_prompt}" == "true" ]] ; then
+			for flac in "${!album_flacs_array[@]}" ; do
+				metaflac \
+						--remove-tag=DISCNUMBER \
+						--set-tag=DISCNUMBER="${multi_discnumber_change_array[${flac}]##*::::}" \
+						"${album_flacs_array[${flac}]}"
+			done
+		else
+			metaflac \
+					--remove-tag=DISCNUMBER \
+					--set-tag=DISCNUMBER="${new_discnumber}" \
+					"${album_flacs_array[@]}"
+		fi
+
 	fi
 
 	# Set new DATE tag
@@ -780,26 +1268,28 @@ __retag_album () {
 
 	# Unset all the album tag values
 	# Original tag values
-	unset ARTIST
-	unset ALBUM
-	unset DISCNUMBER
-	unset DATE
-	unset TRACKTOTAL
-	unset GENRE
-	unset RELEASETYPE
-	unset SOURCE
-	unset MASTERING
+	unset -v \
+		ARTIST \
+		ALBUM \
+		DISCNUMBER \
+		DATE \
+		TRACKTOTAL \
+		GENRE \
+		RELEASETYPE \
+		SOURCE \
+		MASTERING
 
 	# New tag values
-	unset new_artist
-	unset new_album
-	unset new_discnumber
-	unset new_date
-	unset new_tracktotal
-	unset new_genre
-	unset new_releasetype
-	unset new_source
-	unset new_mastering
+	unset -v \
+		new_artist \
+		new_album \
+		new_discnumber \
+		new_date \
+		new_tracktotal \
+		new_genre \
+		new_releasetype \
+		new_source \
+		new_mastering
 }
 
 __retag_tracks () {
@@ -833,12 +1323,13 @@ __retag_tracks () {
 	done
 
 	# Unset all the track tag values
-	unset TRACKNUMBER
-	unset TITLE
-	unset tracknumber_tag
-	unset title_tag
-	unset new_tracknumber_array
-	unset new_title_array
+	unset -v \
+		TRACKNUMBER \
+		TITLE \
+		tracknumber_tag \
+		title_tag \
+		new_tracknumber_array \
+		new_title_array
 }
 
 __tag_directory () {
@@ -849,9 +1340,10 @@ __tag_directory () {
 
 	# Reset other prompt values and
 	# start the current directory over
-	unset retag_album
-	unset retag_tracks
-	unset final_prompt
+	unset -v \
+		retag_album \
+		retag_tracks \
+		final_prompt
 }
 
 #  RENAME/MOVE MUSIC
@@ -911,7 +1403,9 @@ __rename_music () {
 	ALBUM="${ALBUM//>/_}"
 	ALBUM="${ALBUM//:/_}"
 	ALBUM="${ALBUM//\\/_}"
-	ALBUM="${ALBUM//\//_}"
+	# Hyphen used below to change (for example):
+	#  24bit/96kHz -> 24bit-96kHz
+	ALBUM="${ALBUM//\//-}"
 	ALBUM="${ALBUM//|/_}"
 	ALBUM="${ALBUM//\?/_}"
 	ALBUM="${ALBUM//\*/_}"
@@ -991,6 +1485,31 @@ __save_album_tags_prompt () {
 	done
 }
 
+__multi_disc_prompt () {
+	printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
+	" Save " "multi-disc" " METADATA? [" "Yes" "/" "No" "] "
+	while read -e -r ; do
+		case "${REPLY}" in
+			[Yy] | [Yy][Ee][Ss] | "")
+				multi_prompt="true"
+				break
+			;;
+			[Nn] | [Nn][Oo])
+				multi_prompt="false"
+				break
+			;;
+			*)
+				# Unknown answer, clear prompt
+				printf "\033[A\033[K"
+
+				# Restate prompt
+				printf "%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
+				" Save " "multi-disc" " METADATA? [" "Yes" "/" "No" "] "
+			;;
+		esac
+	done
+}
+
 __save_track_tags_prompt () {
 	printf "\n\033[K%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}%s" \
 	" Save " "track" " METADATA? [" "Yes" "/" "No" "] "
@@ -1053,9 +1572,10 @@ __tag_directory_final_prompt () {
 
 				# Reset other prompts and start the
 				# current directory over
-				unset retag_album
-				unset retag_tracks
-				unset final_prompt
+				unset -v \
+					retag_album \
+					retag_tracks \
+					final_prompt
 
 				break
 			;;
@@ -1260,7 +1780,7 @@ for current_directory in "${!flac_directories[@]}" ; do
 
 	# This function will rename the tagged music (in the current
 	# directory)
-	__rename_music
+	#__rename_music
 
 	#---END RENAME/MOVE MUSIC------------------------------------------
 
@@ -1270,7 +1790,7 @@ for current_directory in "${!flac_directories[@]}" ; do
 done
 
 # Restore screen settings
-__restore_screen
+#__restore_screen
 
 #---END SCRIPT-----------------------------------------------------
 exit 0
