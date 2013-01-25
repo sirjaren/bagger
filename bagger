@@ -329,9 +329,15 @@ __display_album_tags () {
 				printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}%s${RED}%s${YELLOW}%s${RED}%s${NORMAL}\n" \
 				"" "ALBUM:" " " "${ALBUM}" "  " "*" "${bits_per_sample}bit/${sample_rate}kHz" "*"
 			else
-				# Display normal ALBUM: with ALBUM value
-				printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
-				"" "ALBUM:" " ${ALBUM}"
+				if [[ -z "${ALBUM}" ]] ; then
+					# Null, display: '<empty>'
+					printf "%${SPACING}s${CYAN}%s${NORMAL}%s${MAGENTA}%s${NORMAL}\n" \
+					"" "ALBUM:" " " "<empty>"
+				else
+					# Display normal ALBUM: with ALBUM value
+					printf "%${SPACING}s${CYAN}%s${NORMAL}%s\n" \
+					"" "ALBUM:" " ${ALBUM}"
+				fi
 			fi
 
 		# If the current tag field is DISCNUMBER, display whether there are
@@ -408,47 +414,38 @@ __change_album_tags () {
 			ARTIST)
 				spacing="9"
 				arrow_spacing="7"
-				new_artist="dont tag"
 			;;
 			ALBUM)
 				spacing="10"
 				arrow_spacing="8"
-				new_album="dont tag"
 			;;
 			DISCNUMBER)
 				spacing="5"
 				arrow_spacing="3"
-				new_discnumber="dont tag"
 			;;
 			DATE)
 				spacing="11"
 				arrow_spacing="9"
-				new_date="dont tag"
 			;;
 			TRACKTOTAL)
 				spacing="5"
 				arrow_spacing="3"
-				new_tracktotal="dont tag"
 			;;
 			GENRE)
 				spacing="10"
 				arrow_spacing="8"
-				new_genre="dont tag"
 			;;
 			RELEASETYPE)
 				spacing="4"
 				arrow_spacing="2"
-				new_releasetype="dont tag"
 			;;
 			SOURCE)
 				spacing="9"
 				arrow_spacing="7"
-				new_source="dont tag"
 			;;
 			MASTERING)
 				spacing="6"
 				arrow_spacing="4"
-				new_mastering="dont tag"
 			;;
 		esac
 
@@ -636,47 +633,41 @@ __change_album_tags () {
 				" " "*" " " "${album_tag_field_array[${tag_field}]}:" " " "${!album_tag_field_array[${tag_field}]}"
 			fi
 
-			# If the value of the new tag is different from the old tag, save the
-			# new metadata, else skip it (this allows us to NOT retag files unnecessarily)
-			if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
-
-				# Save the new tag value to be used when tagging
-				# the files
-				case "${album_tag_field_array[${tag_field}]}" in
-					ARTIST)
-						new_artist="${new_tag}"
-					;;
-					ALBUM)
-						new_album="${new_tag}"
-					;;
-					DISCNUMBER)
-						# This will be set in the above iteration, so
-						# no need to set it here
-						:
-					;;
-					DATE)
-						new_date="${new_tag}"
-					;;
-					TRACKTOTAL)
-						# This will be set in the above iteration, so
-						# no need to set it here
-						:
-					;;
-					GENRE)
-						new_genre="${new_tag}"
-					;;
-					RELEASETYPE)
-						new_releasetype="${new_tag}"
-					;;
-					SOURCE)
-						new_source="${new_tag}"
-					;;
-					MASTERING)
-						new_mastering="${new_tag}"
-					;;
-				esac
-
-			fi
+			# Save the new tag value to be used when tagging
+			# the files
+			case "${album_tag_field_array[${tag_field}]}" in
+				ARTIST)
+					new_artist="${new_tag}"
+				;;
+				ALBUM)
+					new_album="${new_tag}"
+				;;
+				DISCNUMBER)
+					# This will be set in the above iteration, so
+					# no need to set it here
+					:
+				;;
+				DATE)
+					new_date="${new_tag}"
+				;;
+				TRACKTOTAL)
+					# This will be set in the above iteration, so
+					# no need to set it here
+					:
+				;;
+				GENRE)
+					new_genre="${new_tag}"
+				;;
+				RELEASETYPE)
+					new_releasetype="${new_tag}"
+				;;
+				SOURCE)
+					new_source="${new_tag}"
+				;;
+				MASTERING)
+					new_mastering="${new_tag}"
+				;;
+			esac
 		fi
 
 		__place_cursor "${total_lines}" 0
@@ -980,7 +971,7 @@ __multi_disc () {
 		# the next album tag (DISCNUMBER)
 		#
 		# ARTIST
-		if [[ "${ARTIST}" != "${new_artist}" && "${ARTIST}" == "dont tag" ]] ; then
+		if [[ "${ARTIST}" != "${new_artist}" ]] ; then
 
 			# If the old tag is empty
 			if [[ -z "${ARTIST}" ]] ; then
@@ -1005,7 +996,7 @@ __multi_disc () {
 		fi
 
 		# ALBUM
-		if [[ "${ALBUM}" != "${new_album}" && "${ALBUM}" == "dont tag" ]] ; then
+		if [[ "${ALBUM}" != "${new_album}" ]] ; then
 
 			# If the old tag is empty
 			if [[ -z "${ALBUM}" ]] ; then
@@ -1053,7 +1044,7 @@ __multi_disc () {
 		for i in "${multi_discnumber_change_array[@]}" ; do
 			# Obtain tracktotal from array
 			new_tracktotal="${i%::::*}"
-			new_tracktotal="${new_tracktotal#*::::}"
+			new_tracktotal="${new_tracktotal##*::::}"
 
 			if [[ -n "${new_tracktotal}" ]] ; then
 				multiple_tracktotal="true"
@@ -1306,21 +1297,21 @@ __change_track_tags () {
 
 		# If the new metadata is NOT equal to the original metadata (eg. it's
 		# unchanged) and if the new metadata is NOT null, set that value into
-		# its own array.  Otherwise, set a dummy value of "dont tag" in order
-		# to preserve the same number of array indices as ${album_flacs_array[@]}
+		# its own array.  Otherwise, set a dummy value in order to preserve the
+		# same number of array indices as ${album_flacs_array[@]}
 		#
 		# TRACKNUMBER
 		if [[ -n "${new_tracknumber}" && "${new_tracknumber}" != "${TRACKNUMBER}" ]] ; then
 			new_tracknumber_array+=( "${new_tracknumber}" )
 		else
-			new_tracknumber_array+=( "dont tag" )
+			new_tracknumber_array+=( "" )
 		fi
 
 		# TITLE
 		if [[ -n "${new_title}" && "${new_title}" != "${TITLE}" ]] ; then
 			new_title_array+=( "${new_title}" )
 		else
-			new_title_array+=( "dont tag" )
+			new_title_array+=( "" )
 		fi
 
 	done
@@ -1344,111 +1335,87 @@ __reset_track_listing () {
 #  RETAGGING
 #==============================================
 __retag_album () {
-	# Only set tags if there was a new tag specified (eg. ${new_artist} doesn't
-	# equal "dont tag"), otherwise skip tagging for that specific field and continue on
-
 	# Set new ARTIST tag
-	if [[ "${new_artist}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=ARTIST \
-				--set-tag=ARTIST="${new_artist}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=ARTIST \
+			--set-tag=ARTIST="${new_artist}" \
+			"${album_flacs_array[@]}"
 
 	# Set new ALBUM tag
-	if [[ "${new_album}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=ALBUM \
-				--set-tag=ALBUM="${new_album}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=ALBUM \
+			--set-tag=ALBUM="${new_album}" \
+			"${album_flacs_array[@]}"
 
 	# Set new DISCNUMBER tag
-	if [[ "${new_discnumber}" != "dont tag" ]] ; then
+	if [[ "${multi_prompt}" == "true" ]] ; then
+		for flac in "${!album_flacs_array[@]}" ; do
 
-		if [[ "${multi_prompt}" == "true" ]] ; then
-			for flac in "${!album_flacs_array[@]}" ; do
+			# Obtain discnumber from array
+			tag_discnumber="${multi_discnumber_change_array[${flac}]#*::::}"
+			tag_discnumber="${tag_discnumber%%::::*}"
 
-				# Obtain discnumber from array
-				tag_discnumber="${multi_discnumber_change_array[${flac}]#*::::}"
-				tag_discnumber="${tag_discnumber%%::::*}"
-
-				metaflac \
-						--remove-tag=DISCNUMBER \
-						--set-tag=DISCNUMBER="${tag_discnumber}" \
-						"${album_flacs_array[${flac}]}"
-			done
-		else
 			metaflac \
 					--remove-tag=DISCNUMBER \
-					--set-tag=DISCNUMBER="${new_discnumber}" \
-					"${album_flacs_array[@]}"
-		fi
-
+					--set-tag=DISCNUMBER="${tag_discnumber}" \
+					"${album_flacs_array[${flac}]}"
+		done
+	else
+		metaflac \
+				--remove-tag=DISCNUMBER \
+				--set-tag=DISCNUMBER="${new_discnumber}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new DATE tag
-	if [[ "${new_date}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=DATE \
-				--set-tag=DATE="${new_date}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=DATE \
+			--set-tag=DATE="${new_date}" \
+			"${album_flacs_array[@]}"
 
 	# Set new TRACKTOTAL tag
-	if [[ "${new_tracktotal}" != "dont tag" ]] ; then
+	if [[ "${multi_prompt}" == "true" ]] ; then
+		for flac in "${!album_flacs_array[@]}" ; do
 
-		if [[ "${multi_prompt}" == "true" ]] ; then
-			for flac in "${!album_flacs_array[@]}" ; do
+			# Obtain tracktotal from array
+			tag_tracktotal="${multi_discnumber_change_array[${flac}]%::::*}"
+			tag_tracktotal="${tag_tracktotal##*::::}"
 
-				# Obtain tracktotal from array
-				tag_tracktotal="${multi_discnumber_change_array[${flac}]%::::*}"
-				tag_tracktotal="${tag_tracktotal#*::::}"
-
-				metaflac \
-						--remove-tag=TRACKTOTAL \
-						--set-tag=TRACKTOTAL="${tag_tracktotal}" \
-						"${album_flacs_array[@]}"
-			done
-		else
 			metaflac \
 					--remove-tag=TRACKTOTAL \
-					--set-tag=TRACKTOTAL="${new_tracktotal}" \
-					"${album_flacs_array[@]}"
-		fi
+					--set-tag=TRACKTOTAL="${tag_tracktotal}" \
+					"${album_flacs_array[${flac}]}"
+		done
+	else
+		metaflac \
+				--remove-tag=TRACKTOTAL \
+				--set-tag=TRACKTOTAL="${new_tracktotal}" \
+				"${album_flacs_array[@]}"
 	fi
 
 	# Set new GENRE tag
-	if [[ "${new_genre}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=GENRE \
-				--set-tag=GENRE="${new_genre}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=GENRE \
+			--set-tag=GENRE="${new_genre}" \
+			"${album_flacs_array[@]}"
 
 	# Set new RELEASETYPE tag
-	if [[ "${new_releasetype}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=RELEASETYPE \
-				--set-tag=RELEASETYPE="${new_releasetype}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=RELEASETYPE \
+			--set-tag=RELEASETYPE="${new_releasetype}" \
+			"${album_flacs_array[@]}"
 
 	# Set new SOURCE tag
-	if [[ "${new_source}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=SOURCE \
-				--set-tag=SOURCE="${new_source}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=SOURCE \
+			--set-tag=SOURCE="${new_source}" \
+			"${album_flacs_array[@]}"
 
 	# Set new MASTERING tag
-	if [[ "${new_mastering}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=MASTERING \
-				--set-tag=MASTERING="${new_mastering}" \
-				"${album_flacs_array[@]}"
-	fi
+	metaflac \
+			--remove-tag=MASTERING \
+			--set-tag=MASTERING="${new_mastering}" \
+			"${album_flacs_array[@]}"
 
 	# Unset all the album tag values
 	# Original tag values
@@ -1489,7 +1456,7 @@ __retag_tracks () {
 		title_tag="${new_title_array[${flac}]}"
 
 		# Set new TRACKNUMBER tag
-		if [[ "${tracknumber_tag}" != "dont tag" ]] ; then
+		if [[ -n "${tracknumber_tag}" ]] ; then
 			metaflac \
 					--remove-tag=TRACKNUMBER \
 					--set-tag=TRACKNUMBER="${tracknumber_tag}" \
@@ -1497,7 +1464,7 @@ __retag_tracks () {
 		fi
 
 		# Set new TITLE tag
-		if [[ "${title_tag}" != "dont tag" ]] ; then
+		if [[ -n "${title_tag}" ]] ; then
 			metaflac \
 					--remove-tag=TITLE \
 					--set-tag=TITLE="${title_tag}" \
@@ -1535,10 +1502,12 @@ __tag_directory () {
 __rename_music () {
 	# This currently renames music as follows:
 	#
-	#  ARTIST/DATE - ALBUM/TRACKNUMBER - TITLE.flac
+	#  ARTIST/DATE - ALBUM/<DISCNUMBER> - TRACKNUMBER - TITLE.flac
 	#
 	#  Example:
 	#  Kamelot/1995 - Eternity/02 - Black Tower.flac
+	#                       or
+	#  Kamelot/1995 - Eternity/1 - 02 - Black Tower.flac
 	#
 	# In order to allow the files to be correctly shown
 	# on other filesystems (like FAT32), special
@@ -1601,11 +1570,12 @@ __rename_music () {
 
 	for flac in "${!album_flacs_array[@]}" ; do
 
-		# This obtains TRACKNUMBER and TITLE
+		# This obtains TRACKNUMBER, TITLE and DISCNUMBER
 		mapfile -n0 -t rename_track_array < \
 		<(metaflac \
 			--show-tag=TRACKNUMBER \
 			--show-tag=TITLE \
+			--show-tag=DISCNUMBER \
 			"${album_flacs_array[${flac}]}"
 		)
 
@@ -1624,9 +1594,19 @@ __rename_music () {
 		TITLE="${TITLE//\?/_}"
 		TITLE="${TITLE//\*/_}"
 
-		# This will move the current FLAC file to the
-		# new location
-		mv "${album_flacs_array[${flac}]}" "${renamed_file_location}/${TRACKNUMBER} - ${TITLE}.flac"
+		# If the album had multiple discs obtain DISCNUMBER
+		# and move the current FLAC file to the new location
+		# using DISCNUMBER as the multi-disc separator
+		if [[ "${multi_prompt}" == "true" ]] ; then
+			DISCNUMBER="${rename_track_array[2]#*=}"
+			mv "${album_flacs_array[${flac}]}" "${renamed_file_location}/${DISCNUMBER} - ${TRACKNUMBER} - ${TITLE}.flac"
+		else
+			# This will move the current FLAC file to the
+			# new location _WITHOUT_ using DISCNUMBER as the
+			# multi-disc separator
+			mv "${album_flacs_array[${flac}]}" "${renamed_file_location}/${TRACKNUMBER} - ${TITLE}.flac"
+		fi
+
 	done
 
 	# Check if the current directory directory has any leftover files
