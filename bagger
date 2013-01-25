@@ -205,13 +205,9 @@ __display_album_tags () {
 							:
 						;;
 					esac
-
 				fi
-
 			fi
-
 		done
-
 	done
 
 	# Go through each tag field and print the tag field as well as the current
@@ -475,8 +471,9 @@ __change_album_tags () {
 		   ]] ; then
 			read -r -e -i "multiple" -p " " new_tag
 
-		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" && -z "${TRACKTOTAL}" ]] ; then
-			read -r -e -i "${#album_flacs_array[@]}" -p " " new_tag
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" && \
+				"${DISCNUMBER}" == "<multiple discs>" ]] ; then
+			read -r -e -i "multiple" -p " " new_tag
 
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
 			( -z "${RELEASETYPE}" || \
@@ -560,6 +557,52 @@ __change_album_tags () {
 					new_discnumber="${new_tag}"
 				;;
 			esac
+
+		# If the user specified 'm', 'multi', or 'multiple' under the
+		# TRACKTOTAL tag, display '<multiple discs>', else proceed as normal
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" ]] ; then
+			case "${new_tag}" in
+				[Mm] | [Mm][Uu][Ll][Tt][Ii] | [Mm][Uu][Ll][Tt][Ii][Pp][Ll][Ee])
+					printf "\r\033[K%3s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
+					" " "*" " " "TRACKTOTAL:" " " "<multiple discs>"
+				;;
+				*)
+					# If the old tag is different from the new one
+					if [[ "${TRACKTOTAL}" != "${new_tag}" ]] ; then
+
+						# If the old tag is empty
+						if [[ -z "${TRACKTOTAL}" ]] ; then
+							printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+							" " "*" " " "TRACKTOTAL:" " " "${new_tag}" " <- " "<empty>"
+
+						# If the new tag is empty
+						elif [[ -z "${new_tag}" ]] ; then
+							printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+							" " "*" " " "TRACKTOTAL:" " " "<empty>"
+
+						# Display the old tag and the new tag differences
+						else
+							printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+							" " "*" " " "TRACKTOTAL:" " " "${new_tag}" " <- " "${TRACKTOTAL}"
+						fi
+
+					# If the old and new tag are the same and the new
+					# tag is empty
+					elif [[ -z "${new_tag}" ]] ; then
+						printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}" \
+						" " "*" " " "TRACKTOTAL:" " " "<empty>"
+
+					# No difference from old tag to new tag, change the tag color
+					# to green
+					else
+						printf "\r\033[K%${arrow_spacing}s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}" \
+						" " "*" " " "TRACKTOTAL:" " " "${TRACKTOTAL}"
+					fi
+					
+					# Set the ${new_tracktotal} to ${new_tag}
+					new_tracktotal="${new_tag}"
+				;;
+			esac
 		else
 			# If the old tag is different from the new one
 			if [[ "${!album_tag_field_array[${tag_field}]}" != "${new_tag}" ]] ; then
@@ -615,7 +658,9 @@ __change_album_tags () {
 						new_date="${new_tag}"
 					;;
 					TRACKTOTAL)
-						new_tracktotal="${new_tag}"
+						# This will be set in the above iteration, so
+						# no need to set it here
+						:
 					;;
 					GENRE)
 						new_genre="${new_tag}"
@@ -654,7 +699,7 @@ __multi_disc () {
 		# Display current directory
 		__top_banner
 
-		# Show multi disc banner
+		# Show multi disc/tracktotal banner
 		__multi_banner
 
 		# Total lines used so far in the header/banner, including
@@ -664,17 +709,41 @@ __multi_disc () {
 		# Current line to the first file
 		current_line="5"
 
-		# Display a listing of FLAC files with the current DISCNUMBER tag
+		# Display a listing of FLAC files with the current DISCNUMBER and
+		# TRACKTOTAL tag
 		for flac in "${!album_flacs_array[@]}" ; do
-			tmp_discnumber="$(metaflac --show-tag=DISCNUMBER "${album_flacs_array[${flac}]}")"
-			tmp_discnumber="${tmp_discnumber##*=}"
+			# Obtain DISCNUMBER and TRACKTOTAL tag into array
+			mapfile -n0 -t tmp_disc_track_array < <(
+				metaflac \
+					--show-tag=DISCNUMBER \
+					--show-tag=TRACKTOTAL \
+					"${album_flacs_array[${flac}]}"
+			)
 
-			if [[ -n "${tmp_discnumber}" ]] ; then
-				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s\n" \
-				"    " "$(__song_length)" " [ " "${tmp_discnumber}" " ] ${album_flacs_array[${flac}]##*/}"
+			# Temporary DISCNUMBER
+			tmp_discnumber="${tmp_disc_track_array[0]##*=}"
+
+			# Temporary TRACKTOTAL
+			tmp_tracktotal="${tmp_disc_track_array[1]##*=}"
+
+			# Display current song with length and DISCNUMBER / TRACKTOTAL
+			#
+			# DISCNUMBER and TRACKTOTAL are both _NOT_ null
+			if [[ -n "${tmp_discnumber}" && -n "${tmp_tracktotal}" ]] ; then
+				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s\n" \
+				"    " "$(__song_length)" " [ " "${tmp_discnumber}" " : " "${tmp_tracktotal}" " ] ${album_flacs_array[${flac}]##*/}"
+			# DISCNUMBER is null and TRACKTOTAL is not
+			elif [[ -z "${tmp_discnumber}" && -n "${tmp_tracktotal}" ]] ; then
+				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${CYAN}%s${NORMAL}%s\n" \
+				"    " "$(__song_length)" " [ " "?" " : " "${tmp_tracktotal}" " ] ${album_flacs_array[${flac}]##*/}"
+			# TRACKTOTAL is null and DISCNUMBER is not
+			elif [[ -n "${tmp_discnumber}" && -z "${tmp_tracktotal}" ]] ; then
+				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s\n" \
+				"    " "$(__song_length)" " [ " "${tmp_discnumber}" " : " "?" " ] ${album_flacs_array[${flac}]##*/}"
+			# Both DISCNUMBER and TRACKTOTAL are null
 			else
-				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s\n" \
-				"    " "$(__song_length)" " [ " "?" " ] ${album_flacs_array[${flac}]##*/}"
+				printf "\r\033[K%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${RED}%s${NORMAL}%s\n" \
+				"    " "$(__song_length)" " [ " "?" " : " "?" " ] ${album_flacs_array[${flac}]##*/}"
 			fi
 		done
 
@@ -690,38 +759,89 @@ __multi_disc () {
 			printf "${GREEN}%s${NORMAL}" "->"
 			__place_cursor "${total_lines}" 0
 
+			# Grab the DISCNUMBER and TRACKTOTAL for the
+			# current FLAC file
+			mapfile -n0 -t old_disc_track_array < <(
+				metaflac \
+					--show-tag=DISCNUMBER \
+					--show-tag=TRACKTOTAL \
+					"${album_flacs_array[${flac}]}"
+			)
+
 			# Display DISCNUMBER prompt field
 			printf "\r\033[K%s${CYAN}%s${NORMAL}" \
 			" " "DISCNUMBER:"
 
-			# Prompt for new DISCNUMBER tag
-			read -r -e -p " " new_discnumber
+			# Old DISCNUMBER
+			old_discnumber="${old_disc_track_array[0]##*=}"
 
-			# Store the value of ${new_discnumber}, along with the song length
-			# and the filename, using :::: as the delimeter:
-			#
-			#  <song length>::::<discnumber>::::<filename>
-			#
-			if [[ -n "${new_discnumber}" ]] ; then
-				multi_discnumber_array+=(
-					"$(__song_length)::::${album_flacs_array[${flac}]##*/}::::${new_discnumber}"
-				)
+			# Prompt for new DISCNUMBER tag
+			read -r -e -p " " -i "${old_discnumber}" new_discnumber
+
+			__place_cursor "${total_lines}" 0
+
+			if [[ -z "${new_discnumber}" ]] ; then
+				read_discnumber="<empty>"
 			else
-			# The user put nothing for the DISCNUMBER tag value, turn the value
-			# from null to zero to allow looping over indices correctly (instead of
-			# having to deal with null values, we just use 0)
+				read_discnumber="${new_discnumber}"
+			fi
+
+			# Display TRACKTOTAL prompt field
+			printf "\r\033[K%s${CYAN}%s${NORMAL}%s" \
+			" " "TRACKTOTAL:" " ${read_discnumber} :"
+
+			# Old TRACKTOTAL
+			old_tracktotal="${old_disc_track_array[1]##*=}"
+
+			# Prompt for new TRACKTOTAL tag
+			read -r -e -p " " -i "${old_tracktotal}" new_tracktotal
+
+			# Store the value of ${new_discnumber} and ${new_tracktotal}, along
+			# with the song length and the filename, using :::: as the
+			# delimeter:
+			#
+			#  <song length>::::<discnumber>::::<tracktotal>::::<filename>
+			#
+			# DISCNUMBER and TRACKTOTAL are both _NOT_ null
+			if [[ -n "${new_discnumber}" && -n "${new_tracktotal}" ]] ; then
 				multi_discnumber_array+=(
-					"$(__song_length)::::${album_flacs_array[${flac}]##*/}::::0"
+					"$(__song_length)::::${new_discnumber}::::${new_tracktotal}::::${album_flacs_array[${flac}]##*/}"
+				)
+			# TRACKTOTAL is null and DISCNUMBER is not
+			elif [[ -n "${new_discnumber}" && -z "${new_tracktotal}" ]] ; then
+				multi_discnumber_array+=(
+					"$(__song_length)::::${new_discnumber}::::0::::${album_flacs_array[${flac}]##*/}"
+				)
+			# DISCNUMBER is null and TRACKTOTAL is not
+			elif [[ -z "${new_discnumber}" && -n "${new_tracktotal}" ]] ; then
+				multi_discnumber_array+=(
+					"$(__song_length)::::0::::${new_tracktotal}::::${album_flacs_array[${flac}]##*/}"
+				)
+			# Both DISCNUMBER and TRACKTOTAL are null
+			else
+				multi_discnumber_array+=(
+					"$(__song_length)::::0::::0::::${album_flacs_array[${flac}]##*/}"
 				)
 			fi
 
 			__place_cursor "${current_line}" 0
-			if [[ -z "${new_discnumber}" ]] ; then
-				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
-				"  " "*" " " "$(__song_length)" " [ " "?" " ] " "${album_flacs_array[${flac}]##*/}"
+
+			# DISCNUMBER and TRACKTOTAL are both _NOT_ null
+			if [[ -n "${new_discnumber}" && -n "${new_tracktotal}" ]] ; then
+				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+				"  " "*" " " "$(__song_length)" " [ " "${new_discnumber}" " : " "${new_tracktotal}" " ] " "${album_flacs_array[${flac}]##*/}"
+			# DISCNUMBER is null and TRACKTOTAL is not
+			elif [[ -z "${new_discnumber}" && -n "${new_tracktotal}" ]] ; then
+				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+				"  " "*" " " "$(__song_length)" " [ " "?" " : " "${new_tracktotal}" " ] " "${album_flacs_array[${flac}]##*/}"
+			# TRACKTOTAL is null and DISCNUMBER is not
+			elif [[ -n "${new_discnumber}" && -z "${new_tracktotal}" ]] ; then
+				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+				"  " "*" " " "$(__song_length)" " [ " "${new_discnumber}" " : " "?" " ] " "${album_flacs_array[${flac}]##*/}"
+			# Both DISCNUMBER and TRACKTOTAL are null
 			else
-				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
-				"  " "*" " " "$(__song_length)" " [ " "${new_discnumber}" " ] " "${album_flacs_array[${flac}]##*/}"
+				printf "\r\033[K%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+				"  " "*" " " "$(__song_length)" " [ " "?" " : " "?" " ] " "${album_flacs_array[${flac}]##*/}"
 			fi
 
 			((current_line++))
@@ -730,20 +850,22 @@ __multi_disc () {
 		# Store a copy of the multi_discnumer_array for use when
 		# tagging the files, because the multi_discnumber_array will
 		# be empty by the time the script begins to tag the files.  This
-		# also converts any DISCNUMBER value of 0 to null (empty) to ensure
-		# proper tagging
+		# also converts any DISCNUMBER and TRACKTOTAL values of 0 to null
+		# (empty) to ensure proper tagging
 		for i in "${multi_discnumber_array[@]}" ; do
-			if [[ "${i##*::::}" -eq 0 ]] ; then
-				multi_discnumber_change_array+=( "${i%::::*}::::" )
-			else
-				multi_discnumber_change_array+=( "${i}" )
-			fi
+			# Replace any 0's with null, done twice to ensure
+			# all are done (// doesn't work here)
+			i="${i/::::0::::/::::::::}"
+			i="${i/::::0::::/::::::::}"
+
+			# Add ${i} to new array
+			multi_discnumber_change_array+=( "${i}" )
 		done
 
-		########################################################
-		# Sort the new DISCNUMBER tag values with the filenames
+		###########################################################
+		# Sort by the new DISCNUMBER tag values with the filenames
 		# to allow easy readability
-		########################################################
+		###########################################################
 
 		# Clear the screen
 		__clear_screen
@@ -772,29 +894,52 @@ __multi_disc () {
 			for flac in "${!multi_discnumber_array[@]}" ; do
 
 				# Specific values obtained from each indexed value
-				sort_filename="${multi_discnumber_array[${flac}]#*::::}"
-				sort_filename="${sort_filename%::::*}"
-				sort_discnumber="${multi_discnumber_array[${flac}]##*::::}"
-				sort_length="${multi_discnumber_array[${flac}]%%::*}"
+				sort_length="${multi_discnumber_array[${flac}]%%::::*}"
 
-				# The user didn't enter a value for DISCNUMBER or the value was 0
-				if [[ "${sort_discnumber}" -eq "${disc_index}" && "${sort_discnumber}" -eq 0 ]] ; then
-					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
-					"  " "*" " " "${sort_length}" " [ " "?" " ] " "${sort_filename}"
+				sort_discnumber="${multi_discnumber_array[${flac}]#*::::}"
+				sort_discnumber="${sort_discnumber%%::::*}"
+
+				sort_tracktotal="${multi_discnumber_array[${flac}]%::::*}"
+				sort_tracktotal="${sort_tracktotal##*::::}"
+
+				sort_filename="${multi_discnumber_array[${flac}]##*::::}"
+
+				# The user didn't enter a value for DISCNUMBER or the value was '0'
+				if [[ "${sort_discnumber}" -eq "${disc_index}" && \
+					( "${sort_discnumber}" -eq 0 && "${sort_tracktotal}" -ne 0 ) ]] ; then
+					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+					"  " "*" " " "${sort_length}" " [ " "?" " : " "${sort_tracktotal}" " ] " "${sort_filename}"
+
 					unset -v multi_discnumber_array[${flac}]
 
+				# The user didn't enter a value for TRACKTOTAL or the value was '0'
+				elif [[ "${sort_discnumber}" -eq "${disc_index}" && \
+					( "${sort_discnumber}" -ne 0 && "${sort_tracktotal}" -eq 0 ) ]] ; then
+					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+					"  " "*" " " "${sort_length}" " [ " "${sort_discnumber}" " : " "?" " ] " "${sort_filename}"
+
+					unset -v multi_discnumber_array[${flac}]
+
+				# The user didn't enter a value for TRACKTOTAL and DISCNUMBER
+				# or both values are '0'
+				elif [[ "${sort_discnumber}" -eq "${disc_index}" && \
+					( "${sort_discnumber}" -eq 0 && "${sort_tracktotal}" -eq 0 ) ]] ; then
+					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${RED}%s${NORMAL}%s${RED}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+					"  " "*" " " "${sort_length}" " [ " "?" " : " "?" " ] " "${sort_filename}"
+
+					unset -v multi_discnumber_array[${flac}]
+
+				# Both TRACKTOTAL and DISCNUMBER are not null and not '0'
 				elif [[ "${sort_discnumber}" -eq "${disc_index}" ]] ; then
-					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
-					"  " "*" " " "${sort_length}" " [ " "${sort_discnumber}" " ] " "${sort_filename}"
+					printf "%s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${GREEN}%s${NORMAL}\n" \
+					"  " "*" " " "${sort_length}" " [ " "${sort_discnumber}" " : " "${sort_tracktotal}" " ] " "${sort_filename}"
+
 					unset -v multi_discnumber_array[${flac}]
 				fi
-
 			done
-
 			# Each time the loop finishes above, add one to the disc_index,
 			# effectively sorting the ${new_discnumber} values with each filename
 			((disc_index++))
-
 		done
 
 		# Separator line
@@ -802,7 +947,6 @@ __multi_disc () {
 		" " "───────────────────────────────────────────────────"
 
 		__multi_disc_prompt
-
 	done
 
 	if [[ "${multi_prompt}" == "true" ]]  ; then
@@ -890,14 +1034,34 @@ __multi_disc () {
 		# This tests for each DISCNUMBER value set for each FLAC file, and if
 		# every file has a null value, then print empty, else show that there
 		# are multiple discs
-		for i in "${multi_discnumber_change_array[@]##*::::}" ; do
-			if [[ -n "${i}" ]] ; then
-				multiple="true"
+		for i in "${multi_discnumber_change_array[@]}" ; do
+			# Obtain discnumber from array
+			new_discnumber="${i#*::::}"
+			new_discnumber="${new_discnumber%%::::*}"
+
+			if [[ -n "${new_discnumber}" ]] ; then
+				multiple_disc="true"
 				break
 			fi
 		done
 
-		if [[ "${multiple}" == "true" ]] ; then
+		# TRACKTOTAL
+		#
+		# This tests for each TRACKTOTAL value set for each FLAC file, and if
+		# every file has a null value, then print empty, else show that there
+		# are multiple discs
+		for i in "${multi_discnumber_change_array[@]}" ; do
+			# Obtain tracktotal from array
+			new_tracktotal="${i%::::*}"
+			new_tracktotal="${new_tracktotal#*::::}"
+
+			if [[ -n "${new_tracktotal}" ]] ; then
+				multiple_tracktotal="true"
+				break
+			fi
+		done
+
+		if [[ "${multiple_disc}" == "true" ]] ; then
 			printf "\r\033[K%3s${MAGENTA}%s${NORMAL}%s${CYAN}%s${NORMAL}%s${YELLOW}%s${NORMAL}\n" \
 			" " "*" " " "DISCNUMBER:" " " "<multiple discs>"
 		else
@@ -1204,9 +1368,14 @@ __retag_album () {
 
 		if [[ "${multi_prompt}" == "true" ]] ; then
 			for flac in "${!album_flacs_array[@]}" ; do
+
+				# Obtain discnumber from array
+				tag_discnumber="${multi_discnumber_change_array[${flac}]#*::::}"
+				tag_discnumber="${tag_discnumber%%::::*}"
+
 				metaflac \
 						--remove-tag=DISCNUMBER \
-						--set-tag=DISCNUMBER="${multi_discnumber_change_array[${flac}]##*::::}" \
+						--set-tag=DISCNUMBER="${tag_discnumber}" \
 						"${album_flacs_array[${flac}]}"
 			done
 		else
@@ -1228,10 +1397,25 @@ __retag_album () {
 
 	# Set new TRACKTOTAL tag
 	if [[ "${new_tracktotal}" != "dont tag" ]] ; then
-		metaflac \
-				--remove-tag=TRACKTOTAL \
-				--set-tag=TRACKTOTAL="${new_tracktotal}" \
-				"${album_flacs_array[@]}"
+
+		if [[ "${multi_prompt}" == "true" ]] ; then
+			for flac in "${!album_flacs_array[@]}" ; do
+
+				# Obtain tracktotal from array
+				tag_tracktotal="${multi_discnumber_change_array[${flac}]%::::*}"
+				tag_tracktotal="${tag_tracktotal#*::::}"
+
+				metaflac \
+						--remove-tag=TRACKTOTAL \
+						--set-tag=TRACKTOTAL="${tag_tracktotal}" \
+						"${album_flacs_array[@]}"
+			done
+		else
+			metaflac \
+					--remove-tag=TRACKTOTAL \
+					--set-tag=TRACKTOTAL="${new_tracktotal}" \
+					"${album_flacs_array[@]}"
+		fi
 	fi
 
 	# Set new GENRE tag
