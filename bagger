@@ -469,8 +469,14 @@ __change_album_tags () {
 			read -r -e -i "multiple" -p " " new_tag
 
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" && \
-				"${DISCNUMBER}" == "<multiple discs>" ]] ; then
-			read -r -e -i "multiple" -p " " new_tag
+				"${DISCNUMBER}" == "<multiple discs>" \
+			 ]] ; then
+				read -r -e -i "multiple" -p " " new_tag
+
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" && \
+				-z "${TRACKTOTAL}" \
+			 ]] ; then
+			read -r -e -i "${#album_flacs_array[@]}" -p " " new_tag
 
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "RELEASETYPE" && \
 			( -z "${RELEASETYPE}" || \
