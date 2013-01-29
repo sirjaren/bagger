@@ -468,6 +468,11 @@ __change_album_tags () {
 		   ]] ; then
 			read -r -e -i "multiple" -p " " new_tag
 
+		elif [[ "${album_tag_field_array[${tag_field}]}" == "DISCNUMBER" && \
+				-z "${DISCNUMBER}" \
+			 ]] ; then
+			read -r -e -i "1" -p " " new_tag
+
 		elif [[ "${album_tag_field_array[${tag_field}]}" == "TRACKTOTAL" && \
 				"${DISCNUMBER}" == "<multiple discs>" \
 			 ]] ; then
